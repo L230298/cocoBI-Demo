@@ -9,9 +9,11 @@ venv/
 
 # 前端
 node_modules/
-dist/
 .vite/
 *.log
+# 允许 frontend/dist/(预构建产物推到 git 给 Railway 服务)
+!frontend/dist/
+!frontend/dist/**/*
 
 # 数据
 backend/data/uploads/*
