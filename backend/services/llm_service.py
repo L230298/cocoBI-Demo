@@ -613,7 +613,7 @@ GROUP BY `{time_field}` ORDER BY 日期 LIMIT 30"""
 
 
 def _find_category_field(mapped: dict) -> str:
-    """从 schema 中找分类字段"""
+    """从 schema 中找分类字段 - 优先选择产品/类别/品类相关的字段"""
     fields = mapped.get("fields", [])
     # 尝试从 metadata 中获取类型
     metadata = mapped.get("data_source_metadata", [])
@@ -622,27 +622,46 @@ def _find_category_field(mapped: dict) -> str:
         for f in metadata[0].get("fields", []):
             field_types[f["name"]] = f.get("type", "")
 
-    # 优先级:category, region, channel, 品类, 地区, 渠道
-    for name in ["category", "品类"]:
+    # 1. 精确匹配:category, 类型, 种类
+    for name in ["category", "类型", "种类"]:
         if name in fields:
             return name
+
+    # 2. 含特定关键词的字段(如 product_category, item_type, etc)
+    for f in fields:
+        if any(k in f.lower() for k in ["category", "type", "kind"]):
+            return f
+
+    # 3. 业务字段(优先级)
+    for name in ["产品类别", "品类", "类别"]:
+        if name in fields:
+            return name
+
+    # 4. 区域/渠道/位置字段
     for name in ["region", "地区"]:
         if name in fields:
             return name
     for name in ["channel", "渠道"]:
         if name in fields:
             return name
+
+    # 5. 设备/配置字段
     for name in ["device_config", "配置"]:
         if name in fields:
             return name
-    # 找第一个非数值、非时间、非 user_id/order_id 字段
+
+    # 6. 找第一个非数值、非时间、非 ID 字段
+    skip = {"user_id", "order_id", "is_valid", "etl_extract_time",
+            "buy_time", "order_date", "id", "_id", "uuid"}
     for f in fields:
-        if f in ("user_id", "order_id", "is_valid", "etl_extract_time", "buy_time", "order_date"):
+        if f.lower() in skip or f.endswith("_id") or f.endswith("id"):
             continue
         t = field_types.get(f, "")
         if "int" in t.lower() or "float" in t.lower() or "date" in t.lower() or "time" in t.lower():
             continue
         return f
+
+    # 最后回退
     if fields:
         return fields[0]
     return "category"
