@@ -175,13 +175,13 @@ def _mock_intent(input_data: dict) -> dict:
     if any(k in text for k in ["为什么", "原因", "怎么掉", "怎么涨", "归因", "因素", "分析"]):
         intent = "AttributeAnalysis"
         confidence = 0.92
-    elif any(k in text for k in ["TOP", "排名", "前几", "前10", "top", "最", "对比", "环比", "同比", "卖得", "畅销", "热卖", "最好", "前3", "前5", "前2", "前1"]):
+    if any(k in text for k in ["按", "分", "组", "维度", "top", "TOP", "排名", "前几", "前10", "最", "对比", "环比", "同比", "卖得", "畅销", "热卖", "最好", "前3", "前5", "前2", "前1"]):
         intent = "QueryCompareAndTopN"
         confidence = 0.88
         # 智能解析 TOP_N:从"前3"/"前5"/"TOP 10"等
         m = re.search(r"(?:前|TOP|top|Top)\s*(\d+)", text)
         top_n_val = int(m.group(1)) if m else 10
-        slots["TOP_N"] = top_n_val
+        slots = {"指标": metric, "时间范围": time_label, "TOP_N": top_n_val, "filters": []}
     elif any(k in text for k in ["异常", "预警", "阈值", "超过", "低于", "不足"]):
         intent = "ThresholdAlert"
         confidence = 0.85
