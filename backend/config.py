@@ -26,12 +26,16 @@ SQL_TIMEOUT_SECONDS = 5
 CHART_RENDER_TIMEOUT_SECONDS = 3
 LLM_MOCK_DELAY_MS = 500
 
-# 路径
-BACKEND_DIR = Path(__file__).parent
-DATA_DIR = BACKEND_DIR / "data"
-SAMPLES_DIR = DATA_DIR / "samples"
-UPLOAD_DIR = DATA_DIR / "uploads"
-EXPORT_DIR = DATA_DIR / "exports"
+# 路径 - 支持 Railway Volume 持久化
+# Railway 部署时挂载 Volume 到 /app/data(整目录持久)
+# 本地开发用 ./data
+_BACKEND_DIR = Path(__file__).parent
+_BASE_DIR = Path("/app/data") if Path("/app").exists() else _BACKEND_DIR / "data"
+
+DATA_DIR = _BASE_DIR
+SAMPLES_DIR = _BASE_DIR / "samples"
+UPLOAD_DIR = _BASE_DIR / "uploads"
+EXPORT_DIR = _BASE_DIR / "exports"
 
 # 确保目录存在
 for d in [DATA_DIR, SAMPLES_DIR, UPLOAD_DIR, EXPORT_DIR]:
