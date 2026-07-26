@@ -38,7 +38,7 @@ def load_dataset_to_sqlite(conn: sqlite3.Connection, dataset_id: str) -> None:
     df.to_sql("orders", conn, if_exists="replace", index=False)
 
 
-def parse_uploaded_file(file_path: Path, dataset_name: str, industry_template: str = "通用") -> dict:
+def parse_uploaded_file(file_path: Path, dataset_name: str, industry_template: str = "通用", dataset_id_override: str | None = None) -> dict:
     """解析上传文件,提取 Schema 与样本,写入数据集注册表"""
     if file_path.suffix.lower() == ".csv":
         df = pd.read_csv(file_path, nrows=1000)  # 抽样前 1000 行分析 Schema
@@ -70,7 +70,11 @@ def parse_uploaded_file(file_path: Path, dataset_name: str, industry_template: s
     from datetime import datetime
     import uuid
 
-    dataset_id = f"ds-{uuid.uuid4().hex[:8]}"
+    # 优先用稳定 ID(从文件 hash),保证重启后 ID 不变
+    if dataset_id_override:
+        dataset_id = dataset_id_override
+    else:
+        dataset_id = f"ds-{uuid.uuid4().hex[:8]}"
     info = {
         "dataset_id": dataset_id,
         "name": dataset_name,
@@ -88,6 +92,36 @@ def parse_uploaded_file(file_path: Path, dataset_name: str, industry_template: s
 
     register_dataset(dataset_id, info)
     return info
+
+
+def load_existing_uploads():
+    """启动时扫描 uploads 目录,重新注册已有数据集
+    Volume 挂载后,/app/data/uploads 里的文件还在,需要重新注册到内存
+    """
+    from config import UPLOAD_DIR
+    from pathlib import Path
+    import logging
+    logger = logging.getLogger(__name__)
+
+    p = Path(UPLOAD_DIR)
+    if not p.exists():
+        logger.info("uploads 目录不存在,跳过自动加载")
+        return
+
+    loaded = 0
+    for f in p.iterdir():
+        if f.suffix.lower() not in (".csv", ".xlsx", ".xls"):
+            continue
+        # file format: ds-<hash>.csv
+        dataset_id = f.stem  # ds-xxxxxxxxxx
+        try:
+            info = parse_uploaded_file(f, dataset_name=f.stem, industry_template="通用", dataset_id_override=dataset_id)
+            loaded += 1
+            logger.info(f"自动加载已上传数据集: {dataset_id} ({info['row_count']} 行)")
+        except Exception as e:
+            logger.warning(f"加载 {f.name} 失败: {e}")
+
+    logger.info(f"启动自动加载完成,共 {loaded} 个数据集")
 
 
 def _infer_glossary(df) -> dict[str, str]:

@@ -1,5 +1,6 @@
 """数据集 API - 上传/列表/删除"""
 from __future__ import annotations
+import hashlib
 import uuid
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
@@ -9,6 +10,14 @@ from services.dataset_loader import parse_uploaded_file
 from services.dataset_registry import list_datasets, get_dataset, delete_dataset
 
 router = APIRouter(prefix="/api/dataset", tags=["dataset"])
+
+
+def _stable_id_from_bytes(content: bytes, suffix: str) -> str:
+    """基于文件内容 SHA256 前 12 字符 + 格式后缀做稳定 ID
+    同文件上传多次会得到同样 ID,这样重启后浏览器持有的 ID 仍然有效
+    """
+    h = hashlib.sha256(content).hexdigest()[:10]
+    return f"ds-{h}"
 
 
 @router.post("/upload")
@@ -31,15 +40,17 @@ async def upload_dataset(
             detail={"error_code": "Dataset_FormatError", "error_msg": FRIENDLY_ERRORS["Dataset_FormatError"]},
         )
 
-    # 持久化文件
-    file_id = uuid.uuid4().hex[:12]
-    save_path = Path(UPLOAD_DIR) / f"{file_id}{suffix}"
+    # 先读全部内容计算稳定 ID
     content = await file.read()
+
+    # 持久化文件(ID 来自内容 hash,而不是 uuid)
+    stable_id = _stable_id_from_bytes(content, suffix)
+    save_path = Path(UPLOAD_DIR) / f"{stable_id}{suffix}"
     save_path.write_bytes(content)
 
-    # 解析 + 注册
+    # 解析 + 注册(用稳定 ID)
     try:
-        info = parse_uploaded_file(save_path, dataset_name, industry_template)
+        info = parse_uploaded_file(save_path, dataset_name, industry_template, dataset_id_override=stable_id)
     except Exception as e:
         raise HTTPException(
             status_code=400,

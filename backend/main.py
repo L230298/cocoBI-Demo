@@ -26,9 +26,10 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动时自动注册示例数据集"""
-    from services.dataset_loader import parse_uploaded_file
+    """启动时自动注册示例数据集 + 扫描已上传的数据集"""
+    from services.dataset_loader import parse_uploaded_file, load_existing_uploads
 
+    # 1. 加载示例数据
     sample = SAMPLES_DIR / "retail_20260720_gmv.csv"
     if sample.exists():
         try:
@@ -40,6 +41,10 @@ async def lifespan(app: FastAPI):
             logger.info(f"示例数据集已加载: {info['dataset_id']} ({info['row_count']} 行)")
         except Exception as e:
             logger.warning(f"示例数据集加载失败: {e}")
+
+    # 2. 扫描 /app/data/uploads 里的所有已上传文件,稳定 ID 重建注册表
+    #    Volume 挂载后,文件还在,只需重新注册到内存
+    load_existing_uploads()
 
     yield
 
