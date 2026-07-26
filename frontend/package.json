@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "cocobi-demo-frontend",
   "private": true,
   "version": "1.0.3",
@@ -6,3 +6,4 @@
     "start": "node server.js"
   }
 }
+
