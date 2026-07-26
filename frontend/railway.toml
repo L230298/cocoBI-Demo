@@ -1,8 +1,10 @@
-# Railway 前端配置(Static Site)
-# 注意:这个文件应该放在 frontend/ 下并通过 Railway service 单独部署
+# Railway 前端配置(忽略此文件 - 服务级别由 Railway UI 配置)
 
 [build]
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "npx vite preview --host 0.0.0.0 --port $PORT"
+startCommand = "npm run build && npx vite preview --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
