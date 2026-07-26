@@ -1,14 +1,8 @@
 {
   "name": "cocobi-demo-frontend",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "scripts": {
-    "start": "python3 -m http.server $PORT --bind 0.0.0.0 --directory dist"
-  },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "echarts": "^5.5.1",
-    "echarts-for-react": "^3.0.2"
+    "start": "node server.js"
   }
 }
