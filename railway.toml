@@ -5,8 +5,8 @@ builder = "DOCKERFILE"
 dockerfilePath = "backend/Dockerfile"
 
 [deploy]
-startCommand = "cd backend && ./start.sh"
+# 不写 startCommand - 让 Dockerfile 的 ENTRYPOINT 自动处理
 healthcheckPath = "/api/health"
-healthcheckTimeout = 120
+healthcheckTimeout = 180  # 3 分钟给冷启动
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
