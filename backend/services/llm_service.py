@@ -303,10 +303,14 @@ def _extract_filters(text: str) -> list:
             return filters
 
     # ===== 6. "类别 X" / "品类 X" =====
+    # 排除业务词 - 避免把 "销售额"/"销量" 等当作 category 值
+    _BUSINESS_TERMS = {"销售额", "销量", "金额", "订单量", "数量", "GMV", "营收", "利润", "利润额"}
     m = re.search(r"(?:类别|品类[是为]?)\s*(.+?)(?=\s*的|\s*[,。]|\s*$)", text)
     if m:
-        filters.append({"field": "category", "op": "=", "value": m.group(1).strip()})
-        return filters
+        val = m.group(1).strip()
+        if val and val not in _BUSINESS_TERMS and len(val) >= 2:
+            filters.append({"field": "category", "op": "=", "value": val})
+            return filters
 
     # ===== 7. 渠道 =====
     m = re.search(r"渠道[是为]?\s*(.+?)(?=\s*的|\s*[,。]|\s*$)", text)
