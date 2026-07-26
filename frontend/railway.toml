@@ -2,13 +2,11 @@
 
 [build]
 builder = "NIXPACKS"
+buildCommand = "echo 'Using pre-built dist/ from git' && ls dist/"
 
 [deploy]
-# Python http.server 服务 dist/ 静态文件 - 最稳定
-# start = python http.server(无需 Node 启动)
-# Railway build command: "npm run build"
-# Railway start command: "python3 -m http.server $PORT"
-startCommand = "npm run build && python3 -m http.server $PORT --bind 0.0.0.0 --directory dist"
+# Node.js 零依赖 server.js
+startCommand = "node server.js"
 healthcheckPath = "/"
 healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
