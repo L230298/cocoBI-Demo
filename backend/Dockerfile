@@ -21,3 +21,5 @@ EXPOSE 8080
 
 # ENTRYPOINT 形式启动,变量替换最可靠
 ENTRYPOINT ["./start.sh"]
+
+# Rebuild trigger at Mon Jul 27 01:45:15     2026
