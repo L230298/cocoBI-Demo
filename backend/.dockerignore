@@ -1,0 +1,23 @@
+# 后端 .dockerignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache
+.coverage
+htmlcov/
+.env
+.env.local
+.venv
+venv/
+
+# 数据和上传(部署后会自动生成)
+data/uploads/*
+!data/uploads/.gitkeep
+data/exports/*
+data/feedback/*
+
+# 日志
+*.log

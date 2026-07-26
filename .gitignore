@@ -1,0 +1,29 @@
+# 后端
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.env
+
+# 前端
+node_modules/
+dist/
+.vite/
+*.log
+
+# 数据
+backend/data/uploads/*
+backend/data/exports/*
+backend/data/feedback/*
+!backend/data/uploads/.gitkeep
+!backend/data/exports/.gitkeep
+!backend/data/feedback/.gitkeep
+!backend/data/samples/
+
+# 系统
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
