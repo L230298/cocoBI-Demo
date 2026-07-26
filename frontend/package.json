@@ -1,9 +1,9 @@
-﻿{
+{
   "name": "cocobi-demo-frontend",
   "private": true,
   "version": "1.0.3",
   "scripts": {
+    "build": "tsc -b && vite build",
     "start": "node server.js"
   }
 }
-
