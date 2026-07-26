@@ -4,7 +4,11 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "npm run build && npm start"
+# Python http.server 服务 dist/ 静态文件 - 最稳定
+# start = python http.server(无需 Node 启动)
+# Railway build command: "npm run build"
+# Railway start command: "python3 -m http.server $PORT"
+startCommand = "npm run build && python3 -m http.server $PORT --bind 0.0.0.0 --directory dist"
 healthcheckPath = "/"
 healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"

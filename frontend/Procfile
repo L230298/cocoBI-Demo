@@ -1,1 +1,1 @@
-web: npx serve dist -l tcp://0.0.0.0:$PORT -s
+web: python3 -m http.server $PORT --bind 0.0.0.0 --directory dist
