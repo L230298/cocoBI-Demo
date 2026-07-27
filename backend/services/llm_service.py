@@ -592,6 +592,28 @@ ORDER BY 日期"""
         # 单值聚合:根据 metric 选择合适字段和聚合函数
         if "user" in metric or "用户" in metric:
             agg_sql = f"COUNT(DISTINCT `{measure_field}`)"
+        elif "客单" in metric or "平均" in metric:
+            # 平均客单价 = AVG(sales_amount)
+            money_field = _detect_money_field(fields)
+            if money_field:
+                agg_sql = f"AVG(`{money_field}`)"
+            else:
+                agg_sql = f"COUNT(*)"
+        elif "利润率" in metric or "占比" in metric or "比例" in metric:
+            # 派生指标:利润率 = SUM(profit) / SUM(sales_amount) * 100
+            profit_field = next((f for f in fields if "profit" in f.lower() or "利润" in f), "profit")
+            money_field = _detect_money_field(fields)
+            if money_field and profit_field in fields:
+                agg_sql = f"CAST(SUM(`{profit_field}`) AS REAL) * 100.0 / NULLIF(SUM(`{money_field}`), 0)"
+            else:
+                agg_sql = f"COUNT(*)"
+        elif "折扣率" in metric or "折扣" in metric:
+            # 折扣率 = AVG(discount) * 100
+            discount_field = next((f for f in fields if "discount" in f.lower() or "折扣" in f), "discount")
+            if discount_field in fields:
+                agg_sql = f"AVG(`{discount_field}`) * 100.0"
+            else:
+                agg_sql = f"COUNT(*)"
         elif metric in ("GMV", "amount", "销售额", "金额", "营收"):
             # 找金额类字段
             money_field = _detect_money_field(fields)
