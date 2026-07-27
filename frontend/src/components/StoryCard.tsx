@@ -67,33 +67,7 @@ export function StoryCard({
         </section>
       )}
 
-      {observations.length > 0 && (
-        <section className="story-section">
-          <h3>💡 可关注观察点</h3>
-          <ul className="observation-list">
-            {observations.map((o, i) => (
-              <li key={i} className={`observation severity-${o.severity}`}>
-                <span className="severity-dot" />
-                {o.text}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {nextSteps.length > 0 && (
-        <section className="story-section">
-          <h3>🎯 下一步建议</h3>
-          <ul className="next-step-list">
-            {nextSteps.map((s, i) => (
-              <li key={i} className={`next-step type-${s.type}`}>
-                <span className="next-step-type">{s.type}</span>
-                {s.text}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {/* PRD 简化:可关注观察点 与 下一步建议 不在前端页面展示,仅在数据洞察报告(复制文案 / 分享链接)中出现 */}
 
       {followups.length > 0 && (
         <section className="story-section">
