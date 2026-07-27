@@ -242,7 +242,7 @@ def _mock_intent(input_data: dict) -> dict:
     elif any(k in text for k in ["异常", "预警", "阈值", "超过", "低于", "不足"]):
         intent = "ThresholdAlert"
         confidence = 0.85
-    elif any(k in text for k in ["解读", "解释", "说明", "怎么样", "分析一下", "不同", "对比", "有什么区别", "怎么样", "消费行为", "行为", "解读一下", "帮我看", "看一下"]):
+    elif any(k in text for k in ["解读", "解释", "说明", "怎么样", "分析一下", "不同", "对比", "有什么区别", "消费行为", "行为", "解读一下", "帮我看", "看一下", "前后", "看看", "看一下"]):
         intent = "SmartInterpretation"
         confidence = 0.82
     elif metric == "用户数":
