@@ -592,6 +592,13 @@ ORDER BY 日期"""
         # 单值聚合:根据 metric 选择合适字段和聚合函数
         if "user" in metric or "用户" in metric:
             agg_sql = f"COUNT(DISTINCT `{measure_field}`)"
+        elif "件" in metric or "多少件" in metric or "件" in text:
+            # "多少件" → SUM(quantity)
+            qty_field = next((f for f in fields if "quantity" in f.lower() or "数量" in f or "件数" in f), None)
+            if qty_field:
+                agg_sql = f"SUM(`{qty_field}`)"
+            else:
+                agg_sql = f"COUNT(*)"
         elif "客单" in metric or "平均" in metric:
             # 平均客单价 = AVG(sales_amount)
             money_field = _detect_money_field(fields)
