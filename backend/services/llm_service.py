@@ -196,7 +196,7 @@ def _mock_intent(input_data: dict) -> dict:
     metric = "GMV"
     if any(k in text for k in ["用户", "客户", "人数", "购买者", "买家"]):
         metric = "用户数"
-    elif any(k in text for k in ["数量", "多少个", "几个", "有多少"]):
+    elif "多少件" in text or "几件" in text or re.search(r"多少\s*个?", text):
         if any(k in text for k in ["用户", "客户", "购买者", "买家"]):
             metric = "用户数"
         elif any(k in text for k in ["订单", "单"]):
@@ -207,6 +207,9 @@ def _mock_intent(input_data: dict) -> dict:
             metric = "数量"
     elif any(k in text for k in ["GMV", "gmv", "销售额", "成交额", "营收"]):
         metric = "GMV"
+    elif "件" in text:
+        # 多少件/几件/件数 - 用 quantity 字段
+        metric = "数量"
     # 接续 query 没指定指标 → 继承上一轮
     if metric == "GMV" and is_followup and inherited_slots.get("指标"):
         # 但跳过"用户数"等特殊指标
