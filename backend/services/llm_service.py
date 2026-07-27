@@ -303,12 +303,24 @@ def _extract_filters(text: str) -> list:
             return filters
 
     # ===== 6. "类别 X" / "品类 X" =====
+    # 用 negative lookbehind 防止跨词抽取(例如 "产品类别销售额" 中的"类别"前面是"品",不抽)
     # 排除业务词 - 避免把 "销售额"/"销量" 等当作 category 值
     _BUSINESS_TERMS = {"销售额", "销量", "金额", "订单量", "数量", "GMV", "营收", "利润", "利润额"}
-    m = re.search(r"(?:类别|品类[是为]?)\s*(.+?)(?=\s*的|\s*[,。]|\s*$)", text)
+    m = re.search(r"(?<![一-龥])(?:类别|品类[是为]?)\s*(.+?)(?=\s*的|\s*[,。]|\s*$)", text)
     if m:
         val = m.group(1).strip()
-        if val and val not in _BUSINESS_TERMS and len(val) >= 2:
+        # 多道防线:
+        # 1. 不在业务词黑名单
+        # 2. 不以业务词结尾(防止 "别销售额" 这种)
+        # 3. 不以 "X" 等通用词结尾
+        _BAD_TAILS = {"销售额", "销量", "金额", "GMV", "营收", "利润", "订单量", "数量"}
+        is_bad = (
+            val in _BUSINESS_TERMS
+            or any(val.endswith(t) for t in _BAD_TAILS)
+            or len(val) > 12
+            or val.startswith(("按", "上", "下", "第", "总", "总"))
+        )
+        if val and not is_bad and len(val) >= 2:
             filters.append({"field": "category", "op": "=", "value": val})
             return filters
 
