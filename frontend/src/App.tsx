@@ -3,7 +3,6 @@ import { useAnalysis } from './hooks/useAnalysis';
 import { ChatInput } from './components/ChatInput';
 import { StoryCard } from './components/StoryCard';
 import { StatusBar } from './components/StatusBar';
-import { DatasetPicker } from './components/DatasetPicker';
 import { ErrorDisplay } from './components/ErrorDisplay';
 import { Skeleton } from './components/Skeleton';
 import { HistoryPanel } from './components/HistoryPanel';
@@ -21,9 +20,7 @@ const SAMPLE_QUERIES = [
 function App() {
   const {
     state,
-    datasets,
     activeDataset,
-    setActiveDataset,
     refreshDatasets,
     uploadFile,
     submitQuery,
@@ -41,7 +38,7 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const q = params.get('q');
-    if (q && activeDataset && state.appState === 'idle') {
+    if (q && state.appState === 'idle') {
       // 短暂延迟确保 UI 渲染好
       setTimeout(() => {
         submitQuery(q);
@@ -49,7 +46,7 @@ function App() {
         window.history.replaceState({}, '', window.location.pathname);
       }, 500);
     }
-  }, [activeDataset, state.appState]);
+  }, [state.appState]);
 
   const def = STATE_MACHINE[state.appState];
   const isLoading = def.uiView === 'loading' || def.uiView === 'skeleton';
@@ -87,12 +84,14 @@ function App() {
 
       <div className="app-body">
         <aside className="sidebar">
-          <DatasetPicker
-            datasets={datasets}
-            active={activeDataset}
-            onSelect={setActiveDataset}
-            uploading={state.appState === 'uploading'}
-          />
+          <button
+            className="new-session-btn"
+            onClick={reset}
+            title="开始新会话"
+          >
+            <span className="new-session-icon">+</span>
+            <span>新建会话</span>
+          </button>
           <HistoryPanel
             items={history}
             activeDataset={activeDataset}
@@ -104,14 +103,6 @@ function App() {
         <main className="main-content">
           <div className="main-toolbar">
             <StatusBar state={state.appState} message={state.statusMessage} />
-            <button
-              className="new-session-btn"
-              onClick={reset}
-              title="开始新会话"
-            >
-              <span className="new-session-icon">+</span>
-              <span>新建会话</span>
-            </button>
           </div>
 
           {state.intent && state.appState !== 'completed' && (
