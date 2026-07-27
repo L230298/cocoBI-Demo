@@ -175,7 +175,7 @@ def _mock_intent(input_data: dict) -> dict:
     if any(k in text for k in ["为什么", "原因", "怎么掉", "怎么涨", "归因", "因素", "分析"]):
         intent = "AttributeAnalysis"
         confidence = 0.92
-    if any(k in text for k in ["按", "分", "组", "维度", "top", "TOP", "排名", "前几", "前10", "最", "对比", "环比", "同比", "卖得", "畅销", "热卖", "最好", "前3", "前5", "前2", "前1"]):
+    if any(k in text for k in ["按", "分", "组", "维度", "top", "TOP", "排名", "前几", "前10", "最", "对比", "环比", "同比", "卖得", "畅销", "热卖", "最好", "前3", "前5", "前2", "前1", "各类", "各品类", "各种", "分门", "分组看", "类别分析", "品类分析", "看出", "来看", "拆", "拆解"]):
         intent = "QueryCompareAndTopN"
         confidence = 0.88
         # 智能解析 TOP_N:从"前3"/"前5"/"TOP 10"等
