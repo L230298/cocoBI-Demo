@@ -130,6 +130,66 @@ def test_no_business_words_in_category_filter():
         print(f"  ✓ [{text}] → {filters}")
 
 
+def test_followup_query_detection():
+    """接续 query 检测 - '再/也/还/那'触发继承"""
+    from services.llm_service import _is_followup_query
+
+    followup_inputs = [
+        "再按城市拆分",
+        "再看一下按月份",
+        "那按渠道呢",
+        "也拆成城市",
+        "另一个维度",
+    ]
+    non_followup = [
+        "上周 GMV 是多少",
+        "6月按产品类别销售额",
+        "今天天气怎样",
+    ]
+    for text in followup_inputs:
+        assert _is_followup_query(text), f"[{text}] 应识别为接续"
+        print(f"  ✓ [{text}] → followup")
+    for text in non_followup:
+        assert not _is_followup_query(text), f"[{text}] 不应识别为接续"
+        print(f"  ✓ [{text}] → not followup")
+
+
+def test_inherit_slots_from_history():
+    """接续 query 继承上一轮的 time_range + intent"""
+    from services.llm_service import _mock_intent
+
+    # 第一轮
+    r1 = _mock_intent({"user_input": "6月按产品类别销售额"})
+    assert r1["intent"] == "QueryCompareAndTopN"
+    assert r1["slots"]["时间范围"] == "2026-06"
+    print(f"  ✓ 第1轮: {r1['intent']} | time={r1['slots']['时间范围']}")
+
+    # 第二轮:接续(只说"再按城市")
+    history = [{
+        "query": "6月按产品类别销售额",
+        "intent": "QueryCompareAndTopN",
+        "slots": r1["slots"],
+        "dataset_id": "ds-1ef97a5720",
+    }]
+    r2 = _mock_intent({
+        "user_input": "再按城市拆分",
+        "session_history": history,
+        "dataset_id": "ds-1ef97a5720",
+    })
+    # 接续 → 应该继承 6月
+    assert r2["slots"]["时间范围"] == "2026-06", f"应继承 2026-06,实际 {r2['slots']['时间范围']}"
+    print(f"  ✓ 第2轮 time={r2['slots']['时间范围']}(继承 6月)")
+
+    # 第三轮:有明确时间 - 不继承
+    r3 = _mock_intent({
+        "user_input": "再按渠道看 5月",
+        "session_history": history,
+        "dataset_id": "ds-1ef97a5720",
+    })
+    assert r3["slots"]["时间范围"] == "2026-05"
+    print(f"  ✓ 第3轮 time={r3['slots']['时间范围']}(指定 5月,不继承)")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("测试 1: QueryCompareAndTopN 返回分组数据")
@@ -153,6 +213,18 @@ if __name__ == "__main__":
     print("测试 4: category filter 没误抓业务词")
     print("=" * 60)
     test_no_business_words_in_category_filter()
+
+    print()
+    print("=" * 60)
+    print("测试 5: 接续 query 检测")
+    print("=" * 60)
+    test_followup_query_detection()
+
+    print()
+    print("=" * 60)
+    print("测试 6: 接续 query 继承 slots")
+    print("=" * 60)
+    test_inherit_slots_from_history()
 
     print()
     print("=" * 60)

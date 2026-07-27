@@ -22,16 +22,24 @@ class Orchestrator:
         self.storytelling_agent = StorytellingAgent()
 
     async def run(
-        self, user_input: str, dataset_id: str, session_id: str, user_id: str = "default"
+        self, user_input: str, dataset_id: str, session_id: str, user_id: str = "default",
+        conversation_history: list | None = None
     ) -> AsyncGenerator[dict, None]:
         """SSE 流式输出 - 对应 PRD §3.4.6 状态变化"""
-        full_result: dict = {"dataset_id": dataset_id, "user_input": user_input}
+        history = conversation_history or []
+        full_result: dict = {
+            "dataset_id": dataset_id,
+            "user_input": user_input,
+            "conversation_history": history,
+        }
 
         # ============ 阶段 1: IntentAgent ============
         yield {"event": "state_change", "state": "requesting", "message": "正在理解您的问题..."}
         await asyncio.sleep(0.1)
 
-        intent_result = await self.intent_agent.run(user_input)
+        intent_result = await self.intent_agent.run(
+            user_input, session_history=history
+        )
         full_result["intent"] = intent_result["intent"]
         full_result["slots"] = intent_result.get("slots", {})
         full_result["confidence"] = intent_result.get("confidence", 0)

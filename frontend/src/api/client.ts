@@ -59,11 +59,21 @@ export const api = {
   deleteDataset: (id: string) => jsonFetch<{ success: boolean }>(`/dataset/${id}`, { method: 'DELETE' }),
 
   // 对话 - 流式 NDJSON
-  chat: async function* (userInput: string, datasetId: string, sessionId: string): AsyncGenerator<SSEEvent> {
+  chat: async function* (
+    userInput: string,
+    datasetId: string,
+    sessionId: string,
+    conversationHistory: Array<{intent: string; slots: Record<string, unknown>; dataset_id?: string}> = []
+  ): AsyncGenerator<SSEEvent> {
     const res = await fetch(`${BASE_URL}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_input: userInput, dataset_id: datasetId, session_id: sessionId }),
+      body: JSON.stringify({
+        user_input: userInput,
+        dataset_id: datasetId,
+        session_id: sessionId,
+        conversation_history: conversationHistory,
+      }),
     });
     if (!res.ok || !res.body) {
       yield { event: 'error', message: '服务连接失败' };

@@ -30,6 +30,7 @@ async def chat(req: ChatRequest):
                 user_input=req.user_input,
                 dataset_id=req.dataset_id or "",
                 session_id=req.session_id,
+                conversation_history=req.conversation_history or [],
             ):
                 yield json.dumps(event, ensure_ascii=False, default=str) + "\n"
         except Exception as e:

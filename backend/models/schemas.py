@@ -128,6 +128,8 @@ class ChatRequest(BaseModel):
     session_id: str
     user_input: str = Field(min_length=1, max_length=500)
     dataset_id: Optional[str] = None
+    # 多轮对话:之前查询的 intent + slots(用来做"再按城市拆分"等接续识别)
+    conversation_history: Optional[list[dict]] = None
     industry_template: Optional[str] = "通用"
 
 

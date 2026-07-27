@@ -38,6 +38,37 @@ async def mock_call(agent_name: str, user_input: dict) -> dict:
     return {}
 
 
+# ==================== 多轮对话工具 ====================
+def _is_followup_query(text: str) -> bool:
+    """检测接续 query - 包含"再/也/还/那/呢/对比"等词,或很短(无时间/无主语)"""
+    if not text:
+        return False
+    text = text.strip()
+    # 显式接续词
+    followup_keywords = ["再", "也", "还", "那", "呢", "那按", "拆", "对比", "另一个", "按不同"]
+    if any(k in text for k in followup_keywords):
+        return True
+    # 句子很短(< 8 字符)且没有主语 → 多半是接续
+    if len(text) < 8 and not any(w in text for w in ["什么", "哪个", "怎样", "怎么"]):
+        # 但 "6月销售额" 这种短句不算接续
+        if not _parse_time_range(text)["label"]:
+            return True
+    return False
+
+
+def _find_recent_query(history: list, target_dataset: str = "") -> dict | None:
+    """从历史中找最近一条同 dataset 的查询(继承它的 intent+slots)"""
+    for h in history:
+        # 每条 history 应包含 intent + slots
+        if not h.get("intent"):
+            continue
+        # dataset 匹配(空就匹配任意)
+        if target_dataset and h.get("dataset_id") and h["dataset_id"] != target_dataset:
+            continue
+        return h
+    return None
+
+
 # ==================== 时间解析工具 ====================
 def _parse_time_range(text: str) -> dict:
     """解析自然语言时间范围,返回 {label, start_date, end_date}
@@ -136,20 +167,34 @@ def _parse_time_range(text: str) -> dict:
 
 # ==================== Agent 1: IntentAgent ====================
 def _mock_intent(input_data: dict) -> dict:
-    """识别意图 + 提取槽位"""
+    """识别意图 + 提取槽位(支持多轮对话接续)"""
     text = input_data.get("user_input", "")
+    history = input_data.get("session_history") or []
+
+    # 1. 检测接续词(从上一轮继承)
+    is_followup = _is_followup_query(text)
+    inherited_slots: dict = {}
+    if is_followup and history:
+        # 取最近一条同 dataset 的查询继承
+        last = _find_recent_query(history, target_dataset=input_data.get("dataset_id", ""))
+        if last and last.get("slots"):
+            inherited_slots = dict(last.get("slots", {}))
 
     # 时间范围
     time_range = _parse_time_range(text)
+    time_label = time_range["label"] or "最近7天"
     # 趋势查询且没有明确时间范围 → 默认"全部时间"
-    if any(k in text for k in ["趋势", "走势", "每日", "按日", "按天"]):
-        time_label = time_range["label"] or "全部时间"
-    else:
-        time_label = time_range["label"] or "最近7天"
+    if any(k in text for k in ["趋势", "走势", "每日", "按日", "按天"]) and not time_label:
+        time_label = "全部时间"
+
+    # 接续 query 没指定时间 → 继承上一轮(以 _parse_time_range 的 start 为准)
+    if is_followup and not time_range.get("start") and inherited_slots.get("时间范围"):
+        time_label = inherited_slots["时间范围"]
 
     # 指标识别
     # 默认 metric = GMV(商品总销售额 / Gross Merchandise Value)
     metric = "GMV"
+    if any(k in text for k in ["用户", "客户", "人数", "购买者", "买家"]):
         metric = "用户数"
     elif any(k in text for k in ["数量", "多少个", "几个", "有多少"]):
         if any(k in text for k in ["用户", "客户", "购买者", "买家"]):
@@ -162,6 +207,11 @@ def _mock_intent(input_data: dict) -> dict:
             metric = "数量"
     elif any(k in text for k in ["GMV", "gmv", "销售额", "成交额", "营收"]):
         metric = "GMV"
+    # 接续 query 没指定指标 → 继承上一轮
+    if metric == "GMV" and is_followup and inherited_slots.get("指标"):
+        # 但跳过"用户数"等特殊指标
+        if inherited_slots["指标"] not in ("GMV", "数量"):
+            metric = inherited_slots["指标"]
     elif any(k in text for k in ["订单", "单量", "销量"]):
         metric = "订单量"
     elif any(k in text for k in ["转化率", "转化"]):
@@ -214,6 +264,21 @@ def _mock_intent(input_data: dict) -> dict:
 
     # 提取筛选条件(简单正则)
     filters = _extract_filters(text)
+    filters = _extract_filters(text)
+
+    # 接续 query 继承上一轮的 filters + intent
+    inherited_intent = inherited_slots.get("intent") if is_followup else None
+    inherited_filters = inherited_slots.get("filters", []) if is_followup else []
+    if is_followup and inherited_filters and not filters:
+        # 用户没指定新 filter 时,继承上一轮
+        filters = list(inherited_filters)
+    if is_followup and inherited_intent:
+        # 智能继承 intent:如果当前 query 没明确新 intent,沿用
+        if intent == "QueryBasicMetrics" and inherited_intent in (
+            "QueryCompareAndTopN", "QueryUserCount", "QueryTrend"
+        ):
+            intent = inherited_intent
+            confidence = 0.85
 
     slots = {
         "指标": metric,

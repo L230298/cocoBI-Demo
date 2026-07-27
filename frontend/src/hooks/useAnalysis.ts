@@ -94,8 +94,24 @@ export function useAnalysis() {
         statusMessage: '正在理解您的问题...',
       });
 
+      // 多轮对话:把最近 3 条历史(去掉当前)传给后端
+      const prevHistory = history
+        .filter((h) => h.query !== userInput)
+        .slice(0, 3)
+        .map((h) => ({
+          query: h.query,
+          intent: 'inherited',  // 后端不需要
+          slots: { 时间范围: undefined },
+          dataset_id: h.dataset_id,
+        }));
+
       try {
-        for await (const event of api.chat(userInput, activeDataset.dataset_id, SESSION_ID)) {
+        for await (const event of api.chat(
+          userInput,
+          activeDataset.dataset_id,
+          SESSION_ID,
+          prevHistory
+        )) {
           switch (event.event) {
             case 'state_change':
               setState((s) => ({
