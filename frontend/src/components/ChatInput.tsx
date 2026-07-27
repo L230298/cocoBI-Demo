@@ -54,6 +54,7 @@ export function ChatInput({ onSubmit, onUpload, disabled }: Props) {
             aria-label="上传文件"
           >
             <span className="upload-btn-icon" aria-hidden="true">+</span>
+            <span className="upload-btn-label">上传数据</span>
           </button>
           <input
             ref={fileRef}

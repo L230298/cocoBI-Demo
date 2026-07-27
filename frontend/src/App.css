@@ -383,20 +383,23 @@ body {
 
 /* ============= Upload Button (+) ============= */
 .upload-btn {
-  width: 30px;
   height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   border: 1px dashed #c7d2fe;
   background: #f5f3ff;
   color: #5b6cff;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s;
-  padding: 0;
+  padding: 0 10px;
   flex-shrink: 0;
   margin-top: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 .upload-btn:hover:not(:disabled) {
   background: #5b6cff;
@@ -413,10 +416,13 @@ body {
   cursor: not-allowed;
 }
 .upload-btn-icon {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 500;
   line-height: 1;
   margin-top: -2px;
+}
+.upload-btn-label {
+  display: inline-block;
 }
 
 .send-btn {
