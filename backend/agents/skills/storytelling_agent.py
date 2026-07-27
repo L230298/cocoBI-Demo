@@ -96,7 +96,19 @@ class StorytellingAgent(BaseAgent):
                 if pretty_x:
                     parts.append(pretty_x)
                 if metric:
-                    parts.append(metric)
+                    # 用户友好映射:GMV/营收 → 销售额
+                    metric_friendly = {
+                        "GMV": "销售额",
+                        "营收": "销售额",
+                        "amount": "销售额",
+                        "用户数": "用户数",
+                        "profit": "利润",
+                        "利润": "利润",
+                        "quantity": "数量",
+                        "数量": "数量",
+                    }
+                    friendly_m = metric_friendly.get(metric, metric)
+                    parts.append(friendly_m)
                 chart_title = "".join(parts) if parts else "数据洞察"
 
                 main_chart = await invoke_tool(
