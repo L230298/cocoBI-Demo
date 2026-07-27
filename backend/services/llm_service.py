@@ -546,17 +546,37 @@ ORDER BY 日期"""
         else:
             agg_expr = f"COUNT(*)"
 
+        # 列名友好化(用真实类目字段名替代'维度'/'GMV'字面词)
+        cat_field = _find_category_field(mapped)
+        # 类目字段名转中文友好
+        cat_field_friendly = {
+            "product_category": "产品类别",
+            "category": "类别",
+            "device_config": "设备",
+            "customer_city": "城市",
+            "region": "地区",
+            "channel": "渠道",
+            "品类": "品类",
+        }.get(cat_field.lower() if isinstance(cat_field, str) else "", cat_field)
+
+        # 指标字段名友好化
+        metric_friendly = {
+            "GMV": "销售额",
+            "amount": "销售额",
+            "sales_amount": "销售额",
+            "profit": "利润",
+            "用户数": "用户数",
+        }.get(metric, metric)
+
         if "TOP" in user_input.upper() or top_n:
-            cat_field = _find_category_field(mapped)
-            sql = f"""SELECT `{cat_field}` AS 维度, {agg_expr} AS {metric}
+            sql = f"""SELECT `{cat_field}` AS `{cat_field_friendly}`, {agg_expr} AS `{metric_friendly}`
 FROM `{table}` WHERE {where}
-GROUP BY `{cat_field}` ORDER BY {metric} DESC LIMIT {top_n}"""
-            explanation = f"按 {cat_field} 维度 Top {top_n} 排序"
+GROUP BY `{cat_field}` ORDER BY {metric_friendly} DESC LIMIT {top_n}"""
+            explanation = f"按 {cat_field} Top {top_n} 排序"
         else:
-            cat_field = _find_category_field(mapped)
-            sql = f"""SELECT `{cat_field}` AS 维度, {agg_expr} AS {metric}
+            sql = f"""SELECT `{cat_field}` AS `{cat_field_friendly}`, {agg_expr} AS `{metric_friendly}`
 FROM `{table}` WHERE {where}
-GROUP BY `{cat_field}` ORDER BY {metric} DESC LIMIT {top_n}"""
+GROUP BY `{cat_field}` ORDER BY `{metric_friendly}` DESC LIMIT {top_n}"""
             explanation = f"按 {cat_field} 排序"
 
     elif intent == "ThresholdAlert":
@@ -572,10 +592,17 @@ GROUP BY `{cat_field}` ORDER BY {metric} DESC LIMIT {top_n}"""
             agg_expr = f"COUNT(*)"
 
         cat_field = _find_category_field(mapped)
-        sql = f"""SELECT `{cat_field}` AS 维度, {agg_expr} AS {metric}
+        cat_field_friendly = {
+            "product_category": "产品类别", "category": "类别", "device_config": "设备",
+            "customer_city": "城市", "region": "地区", "channel": "渠道",
+        }.get(cat_field.lower() if isinstance(cat_field, str) else "", cat_field)
+        metric_friendly = {
+            "GMV": "销售额", "amount": "销售额", "profit": "利润",
+        }.get(metric, metric)
+        sql = f"""SELECT `{cat_field}` AS `{cat_field_friendly}`, {agg_expr} AS `{metric_friendly}`
 FROM `{table}` WHERE {where}
-GROUP BY `{cat_field}` HAVING {metric} < 1000
-ORDER BY {metric} ASC LIMIT 50"""
+GROUP BY `{cat_field}` HAVING `{metric_friendly}` < 1000
+ORDER BY `{metric_friendly}` ASC LIMIT 50"""
         explanation = f"阈值预警查询,时间范围 {time_range}"
 
     elif intent == "AttributeAnalysis":
@@ -591,7 +618,14 @@ ORDER BY {metric} ASC LIMIT 50"""
             agg_expr = f"COUNT(*)"
 
         cat_field = _find_category_field(mapped)
-        sql = f"""SELECT `{cat_field}` AS 维度, {agg_expr} AS {metric},
+        cat_field_friendly = {
+            "product_category": "产品类别", "category": "类别", "device_config": "设备",
+            "customer_city": "城市", "region": "地区", "channel": "渠道",
+        }.get(cat_field.lower() if isinstance(cat_field, str) else "", cat_field)
+        metric_friendly = {
+            "GMV": "销售额", "amount": "销售额", "profit": "利润",
+        }.get(metric, metric)
+        sql = f"""SELECT `{cat_field}` AS `{cat_field_friendly}`, {agg_expr} AS `{metric_friendly}`,
        {agg_expr} * 1.0 / SUM({agg_expr}) OVER () AS 贡献度
 FROM `{table}` WHERE {where}
 GROUP BY `{cat_field}` ORDER BY 贡献度 DESC LIMIT 10"""
