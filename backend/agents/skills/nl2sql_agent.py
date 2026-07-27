@@ -51,12 +51,12 @@ class NL2SQLAgent(BaseAgent):
     def __init__(self) -> None:
         super().__init__(name="nl2sql_agent", system_prompt=NL2SQL_AGENT_PROMPT)
 
-    async def run(self, intent: str, slots: dict, mapped_query: dict, dataset_id: str) -> dict:
+    async def run(self, intent: str, slots: dict, mapped_query: dict, dataset_id: str, user_input: str = "") -> dict:
         """生成 SQL - 失败时重试 3 次 → 降级为兜底 - PRD §3.1.5"""
         last_error = None
         for attempt in range(3):
             result = await super().run(
-                {"intent": intent, "slots": slots, "mapped_query": mapped_query}
+                {"intent": intent, "slots": slots, "mapped_query": mapped_query, "user_input": user_input}
             )
 
             # 校验

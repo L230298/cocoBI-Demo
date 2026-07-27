@@ -86,6 +86,7 @@ class Orchestrator:
             slots=intent_result.get("slots", {}),
             mapped_query=schema_result,
             dataset_id=dataset_id,
+            user_input=user_input,
         )
         full_result["sql"] = sql_result
         yield {"event": "sql", "data": sql_result}
