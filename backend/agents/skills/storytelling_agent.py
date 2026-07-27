@@ -61,11 +61,35 @@ class StorytellingAgent(BaseAgent):
                     charts.append(chart_result)
             else:
                 # 单值查询:主图用 render_chart (柱状),副图用每日趋势折线图
+                # 智能 chart title:时间 + 维度 + 指标
+                schema = full_result.get("schema", {})
+                mapped = schema
+                x_field = ""
+                if rows:
+                    # 从行里取第一个 key(类别字段名)
+                    keys = list(rows[0].keys())
+                    # 跳过纯数值字段
+                    for k in keys:
+                        v = rows[0].get(k)
+                        if not isinstance(v, (int, float)):
+                            x_field = k
+                            break
+                chart_title_parts = []
+                if time_range and time_range not in ("", "全部时间", "最近7天"):
+                    chart_title_parts.append(time_range)
+                if x_field and x_field not in ("", metric):
+                    chart_title_parts.append(x_field)
+                chart_title_parts.append(metric)
+                chart_title = "".join(chart_title_parts) if chart_title_parts else story.get("title", "")
+                # 简化:6月+类别+销售额 → "6月产品类别销售额" (但去掉重复)
+                # 实际更稳妥的:就用原 title,但给 chart 单独 title
+                chart_title = story.get("title", "").replace("分析报告", "").strip() or "数据洞察"
+
                 main_chart = await invoke_tool(
                     "render_chart",
                     data=rows,
                     chart_type="auto",
-                    title=story.get("title", ""),
+                    title=chart_title,
                 )
                 if main_chart.get("success"):
                     charts.append(main_chart)
