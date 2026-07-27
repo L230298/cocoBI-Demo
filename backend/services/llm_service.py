@@ -124,7 +124,7 @@ def _parse_time_range(text: str) -> dict:
             start = today - timedelta(days=n * 30)
             return {"label": f"近 {n} 月", "start": start.isoformat(), "end": (today + timedelta(days=1)).isoformat()}
 
-    return {"label": text, "start": "", "end": ""}
+    return {"label": "全部时间", "start": "", "end": ""}
 
 
 # ==================== Agent 1: IntentAgent ====================
