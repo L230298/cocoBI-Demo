@@ -6,6 +6,13 @@
 3. 智能解析时间范围:5月份 / 自然月 / 上季度 / 2026-05-15
 4. 智能提取筛选条件:device_config = 'mac pro 32G 1T'
 5. 生成 SQL 时使用实际字段名 + COUNT(DISTINCT) 等聚合
+
+术语表(用户友好映射):
+- GMV  =  Gross Merchandise Value  =  商品总销售额(成交总额,不含退款)
+- amount  =  销售额(同 GMV)
+- profit  =  利润
+- 贡献度  =  占比(归因分析用)
+- 维度  =  类目/分组字段
 """
 from __future__ import annotations
 import asyncio
@@ -141,8 +148,8 @@ def _mock_intent(input_data: dict) -> dict:
         time_label = time_range["label"] or "最近7天"
 
     # 指标识别
+    # 默认 metric = GMV(商品总销售额 / Gross Merchandise Value)
     metric = "GMV"
-    if any(k in text for k in ["用户", "客户", "人数", "购买者", "买家"]):
         metric = "用户数"
     elif any(k in text for k in ["数量", "多少个", "几个", "有多少"]):
         if any(k in text for k in ["用户", "客户", "购买者", "买家"]):
