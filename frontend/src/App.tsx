@@ -28,6 +28,8 @@ function App() {
     reset,
     history,
     clearHistory,
+    editSql,
+    generateReport,
   } = useAnalysis();
 
   useEffect(() => {
@@ -159,6 +161,8 @@ function App() {
               onShare={handleShare}
               onReset={reset}
               onFeedback={submitFeedback}
+              onSqlEdited={editSql}
+              onGenerateReport={async () => generateReport()}
             />
           )}
         </main>
