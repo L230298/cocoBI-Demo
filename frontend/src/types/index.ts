@@ -86,6 +86,7 @@ export interface SSEEvent {
   state?: AppState;
   data?: any;
   message?: string;
+  query_id?: string;  // 后端给每条 query 生成的 ID(报告功能用)
 }
 
 // ==================== 数据集 ====================
