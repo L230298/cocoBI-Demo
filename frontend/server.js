@@ -12,12 +12,24 @@ const PORT = process.env.PORT || 4173;
 const DIST_DIR = path.join(__dirname, 'dist');
 const BACKEND_URL = process.env.BACKEND_URL || 'https://cocobi-backend-production.up.railway.app';
 
+// 找 dist 目录(支持多个候选位置)
+const path = require('path');
+const fs = require('fs');
+const distCandidates = [
+  path.join(__dirname, 'dist'),
+  path.join(__dirname, '..', 'frontend', 'dist'),
+  '/app/frontend/dist',
+  '/app/dist',
+];
+const DIST_DIR = distCandidates.find((d) => fs.existsSync(d)) || distCandidates[0];
+const BACKEND_URL = process.env.BACKEND_URL || 'https://cocobi-backend-production.up.railway.app';
+
 console.log(`[cocoBI] Starting server on 0.0.0.0:${PORT}`);
 console.log(`[cocoBI] Static dir: ${DIST_DIR}`);
 console.log(`[cocoBI] API proxy: ${BACKEND_URL}`);
 
 if (!fs.existsSync(DIST_DIR)) {
-  console.error(`[cocoBI] ERROR: dist/ not found at ${DIST_DIR}`);
+  console.error(`[cocoBI] ERROR: dist/ not found at any candidate: ${distCandidates.join(', ')}`);
   process.exit(1);
 }
 
