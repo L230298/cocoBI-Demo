@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import HOST, PORT, CORS_ORIGINS, SAMPLES_DIR
-from routers import chat, dataset, story, feedback
+from routers import chat, dataset, story, feedback, report
 
 # 导入所有工具以触发注册 - PRD §3.3.1
 import tools  # noqa: F401
@@ -83,6 +83,7 @@ app.include_router(chat.router)
 app.include_router(dataset.router)
 app.include_router(story.router)
 app.include_router(feedback.router)
+app.include_router(report.router)
 
 
 @app.get("/")
