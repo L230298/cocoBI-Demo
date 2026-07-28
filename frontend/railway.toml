@@ -2,10 +2,11 @@
 
 [build]
 builder = "NIXPACKS"
-buildCommand = "echo 'Using pre-built dist/ from git' && ls dist/"
+# 必须真的 cp 新 dist 到 server 可见目录(否则 Railway 缓存旧版)
+buildCommand = "rm -rf /app/dist && cp -r dist /app/dist && ls /app/dist/assets/"
 
 [deploy]
-# Node.js 零依赖 server.js
+# Node.js 零依赖 server.js(指向 /app/dist 里的 index.html)
 startCommand = "node server.js"
 healthcheckPath = "/"
 healthcheckTimeout = 60
