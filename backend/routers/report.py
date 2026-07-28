@@ -98,12 +98,21 @@ async def generate_report(req: ReportGenerateRequest):
     if not req.query_ids:
         raise HTTPException(status_code=400, detail="query_ids 不能为空")
 
-    from services.session_service import get_recent_queries
+    from services.session_service import get_recent_queries, _QUERIES
     from services.dataset_registry import get_dataset
 
     # 从历史拿 query
     all_queries = get_recent_queries(limit=200)  # user_id="default" 默认
+    # DEBUG: 看 _QUERIES 真实内容
+    debug = {
+        "req_query_ids": req.query_ids,
+        "all_queries_count": len(all_queries),
+        "all_query_ids": [q.get("id") for q in all_queries],
+        "_QUERIES_keys": list(_QUERIES.keys()),
+        "_QUERIES_default_count": len(_QUERIES.get("default", [])),
+    }
     selected = [q for q in all_queries if q.get("id") in req.query_ids]
+    debug["selected_count"] = len(selected)
 
     if not selected:
         # 可能是 reset 过,用 dataset_id 重新生成所有 query 的内容
@@ -167,4 +176,5 @@ async def generate_report(req: ReportGenerateRequest):
                     md += "\n"
         report["markdown"] = md
 
+    report["_debug"] = debug  # DEBUG: 临时看 _QUERIES 状态
     return report
