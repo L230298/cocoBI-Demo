@@ -242,12 +242,19 @@ async def generate_report(req: ReportGenerateRequest):
     if req.format == "docx":
         # 返回 docx 二进制
         docx_bytes = _build_docx(report)
-        filename = f"数据分析报告-{report.get('generated_at', '')[:10]}.docx"
+        # HTTP header 只能用 latin-1, 中文文件名要按 RFC 5987 转码
+        from urllib.parse import quote
+        raw_filename = f"数据分析报告-{report.get('generated_at', '')[:10]}.docx"
+        encoded_filename = quote(raw_filename)
         return Response(
             content=docx_bytes,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": (
+                    f"attachment; "
+                    f'filename="report.docx"; '  # ASCII fallback
+                    f"filename*=UTF-8''{encoded_filename}"  # RFC 5987
+                ),
                 "Content-Length": str(len(docx_bytes)),
             },
         )
