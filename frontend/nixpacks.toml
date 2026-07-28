@@ -1,3 +1,10 @@
-# Override NIXPACKS - frontend 不需要 Python,纯 Node
+# Override: cocoBI-Demo 纯 Node 项目,不需要 Python builder
 [phases.setup]
-nixPkgs = ["nodejs-20_x"]
+nixPkgs = ["nodejs-20_x", "git"]
+cmds = ["npm ci --no-audit --no-fund || npm install --no-audit --no-fund"]
+
+[phases.build]
+cmds = ["npm run build && rm -rf /app/dist && mkdir -p /app/dist && cp -r dist/. /app/dist/"]
+
+[start]
+cmd = "node server.js"
