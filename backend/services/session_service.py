@@ -9,12 +9,14 @@ _LOCK = threading.Lock()
 _QUERIES: dict[str, list[dict]] = defaultdict(list)  # user_id -> queries
 
 
-def record_query(user_id: str, query: str, intent: str, slots: dict) -> None:
+def record_query(user_id: str, query: str, intent: str, slots: dict) -> str:
+    """记录一条 query 到 history,返回该 query 的 ID(供前端报告功能用)"""
+    qid = uuid.uuid4().hex[:8]
     with _LOCK:
         _QUERIES[user_id].insert(
             0,
             {
-                "id": uuid.uuid4().hex[:8],  # 给每条 query 一个 ID,报告端点靠这个匹配
+                "id": qid,
                 "query": query,
                 "intent": intent,
                 "timestamp": datetime.utcnow().isoformat(),
@@ -23,6 +25,7 @@ def record_query(user_id: str, query: str, intent: str, slots: dict) -> None:
         )
         # 最多保留 50 条
         _QUERIES[user_id] = _QUERIES[user_id][:50]
+    return qid
 
 
 def get_recent_queries(user_id: str = "default", limit: int = 5) -> list[dict]:

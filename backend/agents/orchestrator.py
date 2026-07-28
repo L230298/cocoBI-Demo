@@ -43,9 +43,12 @@ class Orchestrator:
         full_result["intent"] = intent_result["intent"]
         full_result["slots"] = intent_result.get("slots", {})
         full_result["confidence"] = intent_result.get("confidence", 0)
-        record_query(user_id, user_input, intent_result["intent"], intent_result.get("slots", {}))
+        query_id = record_query(
+            user_id, user_input, intent_result["intent"], intent_result.get("slots", {})
+        )
+        full_result["query_id"] = query_id
 
-        yield {"event": "intent", "data": intent_result}
+        yield {"event": "intent", "data": intent_result, "query_id": query_id}
 
         # 兜底 - PRD §3.1.5
         if intent_result.get("fallback_message"):

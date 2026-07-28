@@ -122,6 +122,16 @@ export function useAnalysis() {
               break;
             case 'intent':
               setState((s) => ({ ...s, intent: event.data }));
+              // 后端给这条 query 生成了 id,用它替换本地临时 id
+              // 这样报告端点能匹配上 (record_query 返回的 id)
+              if (event.query_id) {
+                setHistory((prev) => {
+                  if (prev.length === 0) return prev;
+                  const next = [...prev];
+                  next[0] = { ...next[0], id: event.query_id as string };
+                  return next;
+                });
+              }
               break;
             case 'schema':
               break;
