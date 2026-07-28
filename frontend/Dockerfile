@@ -14,11 +14,11 @@ RUN npm run build
 FROM node:20-slim
 WORKDIR /app
 COPY --from=builder /build/dist ./dist
-COPY server.js ./
+COPY server.cjs ./
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 
 ENV PORT=4173
 ENV BACKEND_URL=https://cocobi-backend-production.up.railway.app
 EXPOSE 4173
-CMD ["node", "server.js"]
+CMD ["node", "server.cjs"]

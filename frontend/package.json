@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build && rm -rf /app/dist && mkdir -p /app/dist && cp -r dist/. /app/dist/",
-    "start": "node server.js"
+    "start": "node server.cjs"
   },
   "dependencies": {
     "echarts": "^5.5.1",
