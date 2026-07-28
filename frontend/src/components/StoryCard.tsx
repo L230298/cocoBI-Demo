@@ -41,6 +41,7 @@ export function StoryCard({
 }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [voted, setVoted] = useState<'up' | 'down' | null>(null);
   return (
     <div className="story-card">
       <header className="story-header">
@@ -163,20 +164,30 @@ export function StoryCard({
           <RotateCcw size={16} strokeWidth={1.8} />
         </button>
         <button
-          className="action-icon-btn"
-          onClick={() => onFeedback('up')}
-          title="有用"
+          className={`action-icon-btn${voted === 'up' ? ' voted' : ''}`}
+          onClick={() => {
+            if (voted) return;
+            setVoted('up');
+            onFeedback('up');
+          }}
+          disabled={voted !== null}
+          title={voted === 'up' ? '已点赞' : '有用'}
           aria-label="有用"
         >
-          <ThumbsUp size={16} strokeWidth={1.8} />
+          <ThumbsUp size={16} strokeWidth={voted === 'up' ? 2.5 : 1.8} fill={voted === 'up' ? 'currentColor' : 'none'} />
         </button>
         <button
-          className="action-icon-btn"
-          onClick={() => onFeedback('down')}
-          title="没用"
+          className={`action-icon-btn${voted === 'down' ? ' voted' : ''}`}
+          onClick={() => {
+            if (voted) return;
+            setVoted('down');
+            onFeedback('down');
+          }}
+          disabled={voted !== null}
+          title={voted === 'down' ? '已反馈' : '没用'}
           aria-label="没用"
         >
-          <ThumbsDown size={16} strokeWidth={1.8} />
+          <ThumbsDown size={16} strokeWidth={voted === 'down' ? 2.5 : 1.8} fill={voted === 'down' ? 'currentColor' : 'none'} />
         </button>
         <button
           className="action-icon-btn"

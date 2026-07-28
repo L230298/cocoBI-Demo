@@ -69,8 +69,34 @@ function App() {
       return;
     }
     const url = `${window.location.origin}${state.story.share_url}`;
-    navigator.clipboard?.writeText(url).catch(() => {});
-    window.open(url, '_blank');
+    // 1) 尝试复制到剪贴板(失败也不阻塞)
+    let copied = false;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(url)
+        .then(() => { copied = true; })
+        .catch(() => { copied = false; });
+    }
+    // 2) 打开新窗口(可能被 popup blocker 拦, 后面有 fallback)
+    const popup = window.open(url, '_blank');
+    // 3) 兜底: 如果 popup 被拦, 用 prompt 让用户手动复制
+    setTimeout(() => {
+      if (!popup || popup.closed) {
+        const userCopy = window.prompt(
+          `分享链接(已自动复制失败,请手动复制):\n${url}`,
+          url
+        );
+        if (userCopy !== null) {
+          // 用户点了确定, 说明已经复制
+        }
+      } else {
+        alert(
+          copied
+            ? '分享链接已复制 + 已在新窗口打开'
+            : '已在新窗口打开分享页面(链接复制失败,请手动从地址栏复制)'
+        );
+      }
+    }, 300);
   };
 
   return (
