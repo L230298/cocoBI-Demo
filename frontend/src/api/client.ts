@@ -85,7 +85,11 @@ export const api = {
   },
 
   // 生成数据报告(单 query 或多 query)
-  generateReport: async (queryIds: string[], datasetId: string, format: 'json' | 'markdown' = 'markdown'): Promise<any> => {
+  generateReport: async (
+    queryIds: string[],
+    datasetId: string,
+    format: 'json' | 'markdown' | 'docx' = 'docx'
+  ): Promise<any> => {
     const res = await fetch(`${BASE_URL}/report/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -93,6 +97,10 @@ export const api = {
     });
     if (!res.ok) {
       throw new Error(await extractErrorMessage(res));
+    }
+    // docx 是二进制, 其他是 JSON
+    if (format === 'docx') {
+      return await res.blob();
     }
     return res.json();
   },

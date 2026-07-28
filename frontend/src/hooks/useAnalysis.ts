@@ -220,14 +220,11 @@ export function useAnalysis() {
       return;
     }
     try {
-      const report = await api.generateReport(ids, activeDataset.dataset_id);
-      // 弹下载/显示
-      const md = report.markdown || JSON.stringify(report, null, 2);
-      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const blob = await api.generateReport(ids, activeDataset.dataset_id, 'docx');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `数据分析报告-${new Date().toISOString().slice(0, 10)}.md`;
+      a.download = `数据分析报告-${new Date().toISOString().slice(0, 10)}.docx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
