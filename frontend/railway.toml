@@ -1,9 +1,8 @@
 # Railway 前端配置
+# NIXPACKS 跑 npm run build(在 frontend/);build script 自己 cp 到 /app/dist
 
 [build]
 builder = "NIXPACKS"
-# cp 内容(. 后缀)到目标目录,避免嵌套 frontend/dist/
-buildCommand = "rm -rf /app/dist && mkdir -p /app/dist && cp -r frontend/dist/. /app/dist/ && ls /app/dist/assets/"
 
 [deploy]
 startCommand = "node server.js"
