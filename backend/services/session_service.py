@@ -1,6 +1,7 @@
 """Session 管理 - 保存最近查询"""
 from __future__ import annotations
 import threading
+import uuid
 from collections import defaultdict
 from datetime import datetime
 
@@ -13,6 +14,7 @@ def record_query(user_id: str, query: str, intent: str, slots: dict) -> None:
         _QUERIES[user_id].insert(
             0,
             {
+                "id": uuid.uuid4().hex[:8],  # 给每条 query 一个 ID,报告端点靠这个匹配
                 "query": query,
                 "intent": intent,
                 "timestamp": datetime.utcnow().isoformat(),
