@@ -1,6 +1,0 @@
-# Root override: 提示整个项目是 Node.js
-# (后端 cocoBI-backend service 仍正常 build,不影响)
-# 关键是 cocoBI-Demo service 不再被 Python builder 强制装 gcc
-
-[phases.setup]
-nixPkgs = ["nodejs-20_x", "git"]
