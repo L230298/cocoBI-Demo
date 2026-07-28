@@ -183,6 +183,48 @@ export function useAnalysis() {
     setHistory([]);
   }, []);
 
+  const editSql = useCallback(
+    async (newSql: string) => {
+      if (!activeDataset) return { ok: false, error: '请先选择数据集' };
+      try {
+        const r = await api.editSql(newSql, activeDataset.dataset_id);
+        if (r.ok) {
+          // 重新执行成功,更新 sql 和 sqlRows
+          setState((s) => ({ ...s, sql: newSql, sqlRows: r.rows }));
+        }
+        return { ok: r.ok, error: r.error };
+      } catch (e: any) {
+        return { ok: false, error: e.message };
+      }
+    },
+    [activeDataset]
+  );
+
+  const generateReport = useCallback(async (queryIds?: string[]) => {
+    if (!activeDataset) return;
+    const ids = queryIds && queryIds.length > 0
+      ? queryIds
+      : history.slice(0, 50).map((h) => h.id);
+    if (ids.length === 0) {
+      alert('没有可生成报告的 query');
+      return;
+    }
+    try {
+      const report = await api.generateReport(ids, activeDataset.dataset_id);
+      // 弹下载/显示
+      const md = report.markdown || JSON.stringify(report, null, 2);
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `数据分析报告-${new Date().toISOString().slice(0, 10)}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert('生成失败: ' + e.message);
+    }
+  }, [activeDataset, history]);
+
   const submitFeedback = useCallback(async (feedback_type: 'up' | 'down') => {
     if (!state.story) return;
     try {
@@ -207,5 +249,7 @@ export function useAnalysis() {
     reset,
     history,
     clearHistory,
+    editSql,
+    generateReport,
   };
 }

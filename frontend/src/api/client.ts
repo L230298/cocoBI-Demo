@@ -58,6 +58,45 @@ export const api = {
   },
   deleteDataset: (id: string) => jsonFetch<{ success: boolean }>(`/dataset/${id}`, { method: 'DELETE' }),
 
+  // SQL 编辑 - 用户修改后重新执行
+  editSql: async (sql: string, datasetId: string): Promise<{
+    ok: boolean; error?: string; rows?: any[]; columns?: string[]; row_count?: number;
+  }> => {
+    try {
+      const res = await fetch(`${BASE_URL}/sql/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql, dataset_id: datasetId }),
+      });
+      if (!res.ok) {
+        const err = await extractErrorMessage(res);
+        return { ok: false, error: err };
+      }
+      const json = await res.json();
+      return {
+        ok: true,
+        rows: json.rows || [],
+        columns: json.columns || [],
+        row_count: json.row_count || 0,
+      };
+    } catch (e: any) {
+      return { ok: false, error: e.message };
+    }
+  },
+
+  // 生成数据报告(单 query 或多 query)
+  generateReport: async (queryIds: string[], datasetId: string, format: 'json' | 'markdown' = 'markdown'): Promise<any> => {
+    const res = await fetch(`${BASE_URL}/report/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query_ids: queryIds, dataset_id: datasetId, format }),
+    });
+    if (!res.ok) {
+      throw new Error(await extractErrorMessage(res));
+    }
+    return res.json();
+  },
+
   // 对话 - 流式 NDJSON
   chat: async function* (
     userInput: string,
