@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from agents.orchestrator import Orchestrator
 from models.schemas import ChatRequest
 from services.dataset_registry import get_dataset
-from services.session_service import get_recent_queries
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 _orchestrator = Orchestrator()
@@ -46,9 +45,3 @@ async def chat(req: ChatRequest):
             ) + "\n"
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
-
-
-@router.get("/recent-queries")
-async def recent_queries(user_id: str = "default", limit: int = 50):
-    """Debug: 返回 in-memory 的最近 query 列表 (供前端报告功能 + debug 用)"""
-    return {"user_id": user_id, "queries": get_recent_queries(user_id, limit)}
