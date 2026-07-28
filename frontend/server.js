@@ -1,7 +1,6 @@
 // cocoBI 前端服务器 + API 反向代理
-// - 服务 dist/ 静态文件
-// - 代理 /api/* 请求到后端
-// - 同时支持 http 和 https 后端
+// - 服务 dist/ 静态文件(支持多个候选位置)
+// - 代理 /api/* 请求到后端(支持 http 和 https)
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
@@ -9,12 +8,9 @@ const path = require('path');
 const { URL } = require('url');
 
 const PORT = process.env.PORT || 4173;
-const DIST_DIR = path.join(__dirname, 'dist');
 const BACKEND_URL = process.env.BACKEND_URL || 'https://cocobi-backend-production.up.railway.app';
 
 // 找 dist 目录(支持多个候选位置)
-const path = require('path');
-const fs = require('fs');
 const distCandidates = [
   path.join(__dirname, 'dist'),
   path.join(__dirname, '..', 'frontend', 'dist'),
@@ -22,7 +18,6 @@ const distCandidates = [
   '/app/dist',
 ];
 const DIST_DIR = distCandidates.find((d) => fs.existsSync(d)) || distCandidates[0];
-const BACKEND_URL = process.env.BACKEND_URL || 'https://cocobi-backend-production.up.railway.app';
 
 console.log(`[cocoBI] Starting server on 0.0.0.0:${PORT}`);
 console.log(`[cocoBI] Static dir: ${DIST_DIR}`);
