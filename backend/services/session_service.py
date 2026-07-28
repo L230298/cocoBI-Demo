@@ -31,3 +31,12 @@ def record_query(user_id: str, query: str, intent: str, slots: dict) -> str:
 def get_recent_queries(user_id: str = "default", limit: int = 5) -> list[dict]:
     with _LOCK:
         return list(_QUERIES.get(user_id, []))[:limit]
+
+
+def update_query_sql(user_id: str, query_id: str, sql: str) -> None:
+    """NL2SQL 生成 SQL 后, 回填到 history(报告功能靠这个重跑 SQL)"""
+    with _LOCK:
+        for q in _QUERIES.get(user_id, []):
+            if q.get("id") == query_id:
+                q["sql"] = sql
+                return

@@ -9,7 +9,7 @@ from .skills.schema_agent import SchemaAgent
 from .skills.nl2sql_agent import NL2SQLAgent
 from .skills.storytelling_agent import StorytellingAgent
 from tools import invoke_tool
-from services.session_service import record_query
+from services.session_service import record_query, update_query_sql
 
 
 class Orchestrator:
@@ -93,6 +93,9 @@ class Orchestrator:
         )
         full_result["sql"] = sql_result
         yield {"event": "sql", "data": sql_result}
+        # 回填 SQL 到 history(报告功能靠 sql 重跑)
+        if sql_result.get("sql") and query_id:
+            update_query_sql(user_id, query_id, sql_result["sql"])
 
         # 兜底
         if not sql_result.get("is_executable"):
