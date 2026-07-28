@@ -1,6 +1,4 @@
-# Railway 主项目配置(后端 Dockerfile)
-# 注: cocoBI-Demo 服务有自己的 frontend/Dockerfile,这里只配后端
-
+# Railway 项目根配置(只 cocoBI-backend 用)
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "backend/Dockerfile"
