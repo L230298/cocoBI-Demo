@@ -4,7 +4,7 @@
   "version": "1.0.3",
   "type": "module",
   "scripts": {
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && rm -rf /app/dist && mkdir -p /app/dist && cp -r dist/. /app/dist/",
     "start": "node server.js"
   },
   "dependencies": {
