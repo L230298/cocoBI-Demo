@@ -2,8 +2,23 @@
   "name": "cocobi-demo-frontend",
   "private": true,
   "version": "1.0.3",
+  "type": "module",
   "scripts": {
     "build": "tsc -b && vite build",
     "start": "node server.js"
+  },
+  "dependencies": {
+    "echarts": "^5.5.1",
+    "echarts-for-react": "^3.0.2",
+    "lucide-react": "^1.27.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.21"
   }
 }
