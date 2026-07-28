@@ -1,13 +1,11 @@
 # Railway 前端配置
-# 注意: NIXPACKS build context 是仓库根目录,但 dist 在 frontend/ 子目录
 
 [build]
 builder = "NIXPACKS"
-# 把 git 里的 frontend/dist 复制到 server.js 读取的位置
-buildCommand = "rm -rf /app/dist && cp -r frontend/dist /app/dist && ls /app/dist/assets/"
+# cp 内容(. 后缀)到目标目录,避免嵌套 frontend/dist/
+buildCommand = "rm -rf /app/dist && mkdir -p /app/dist && cp -r frontend/dist/. /app/dist/ && ls /app/dist/assets/"
 
 [deploy]
-# Node.js 零依赖 server.js(读 /app/dist 里的 index.html)
 startCommand = "node server.js"
 healthcheckPath = "/"
 healthcheckTimeout = 60
