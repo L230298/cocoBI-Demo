@@ -1,12 +1,12 @@
-# Railway 部署配置(cocobi-backend)
-# Railway 通过 railway.json / railway.toml 自动识别
+# Railway 主项目配置(后端 Dockerfile)
+# 注: cocoBI-Demo 服务有自己的 frontend/Dockerfile,这里只配后端
+
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "backend/Dockerfile"
 
 [deploy]
-# 不写 startCommand - 让 Dockerfile 的 ENTRYPOINT 自动处理
 healthcheckPath = "/api/health"
-healthcheckTimeout = 180  # 3 分钟给冷启动
+healthcheckTimeout = 180
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3

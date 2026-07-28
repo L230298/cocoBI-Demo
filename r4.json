@@ -1,0 +1,6 @@
+{"event": "state_change", "state": "requesting", "message": "正在理解您的问题..."}
+{"event": "intent", "data": {"intent": "QueryBasicMetrics", "confidence": 0.85, "slots": {"指标": "GMV", "时间范围": "全部时间", "filters": []}, "alternatives": []}}
+{"event": "state_change", "state": "receiving", "message": "正在映射数据表..."}
+{"event": "schema", "data": {"tables": ["sales_order"], "fields": ["order_id", "order_date", "customer_id", "customer_city", "product_category", "product_name", "sales_amount", "quantity", "discount", "profit"], "measure_field": "order_id", "time_field": "order_date", "filters": [], "joins": [], "unmapped_slots": [], "confidence": 0.7}}
+{"event": "state_change", "state": "generating", "message": "正在生成查询语句..."}
+{"event": "error", "state": "abnormal", "message": "系统开小差了,请稍后再试", "error_code": "NameError"}
