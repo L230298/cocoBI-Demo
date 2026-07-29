@@ -6,7 +6,7 @@ from io import BytesIO
 from typing import Optional, List, Any
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, HTMLResponse
 from pydantic import BaseModel
 
 from tools import invoke_tool

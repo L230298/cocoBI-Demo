@@ -75,7 +75,6 @@ async def global_exception_handler(request: Request, exc: Exception):
             "success": False,
             "error_code": type(exc).__name__,
             "error_msg": "系统开小差了,请稍后再试",  # 友好提示,不暴露技术细节
-            "_debug": str(exc)[:500],  # DEBUG
         },
     )
 
