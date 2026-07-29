@@ -50,7 +50,13 @@ export function StoryCard({
     <div className="story-card">
       <header className="story-header">
         <h2>{story.title}</h2>
-        <p className="story-summary">{Array.isArray(story.summary) ? story.summary[0] : story.summary}</p>
+        <p className="story-summary">
+          {(() => {
+            const s = Array.isArray(story.summary) ? story.summary[0] : story.summary;
+            // 去掉 markdown 粗体标记 (UI 不渲染)
+            return String(s || '').replace(/\*\*/g, '');
+          })()}
+        </p>
       </header>
 
       {story.charts?.length > 0 && (
