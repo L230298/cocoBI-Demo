@@ -71,6 +71,9 @@ def _render_markdown(story: dict) -> str:
     sql_result = story.get("sql_result") or {}
     rows = sql_result.get("rows") or []
     cols = sql_result.get("columns") or []
+    # execute_sql 不返回 columns, 从 rows[0] 推断
+    if rows and not cols:
+        cols = list(rows[0].keys()) if isinstance(rows[0], dict) else []
     if rows and cols:
         lines.append(f"## 📋 数据明细 ({len(rows)} 行)")
         lines.append("| " + " | ".join(str(c) for c in cols) + " |")
