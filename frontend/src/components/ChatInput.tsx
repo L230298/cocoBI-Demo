@@ -39,13 +39,13 @@ export function ChatInput({ onSubmit, onUpload, disabled }: Props) {
             }
           }}
           placeholder="用自然语言提问,例如:上周 GMV 是多少?"
-          maxLength={500}
+          maxLength={2000}
           disabled={disabled}
           rows={2}
         />
         {/* 输入框内部右下角工具栏: + 上传 + 发送 */}
         <div className="chat-input-actions">
-          <span className="char-count">{value.length} / 500</span>
+          <span className="char-count" style={{ display: 'none' }}>{value.length} / 2000</span>
           <button
             className="upload-btn"
             onClick={() => fileRef.current?.click()}
