@@ -7,6 +7,7 @@ FROM node:20-slim AS builder
 WORKDIR /build
 COPY package.json package-lock.json* ./
 RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+# rebuild trigger $(date +%s)
 COPY . .
 RUN npm run build
 
