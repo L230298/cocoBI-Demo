@@ -161,6 +161,69 @@ def _basic_stats(rows: list[dict], cols: list[str]) -> dict[str, dict[str, Any]]
 
 
 # ==================== docx 渲染 ====================
+def _add_chart_to_doc(doc, chart: dict, prefix: str = "") -> None:
+    """把 echarts config 转成 python-docx 原生 chart 嵌入
+
+    支持 bar/line/pie, 其他类型显示为占位文字
+    """
+    from docx.chart.data import CategoryChartData
+    from docx.enum.chart import XL_CHART_TYPE
+    from docx.shared import Inches
+
+    config = chart.get("config") or {}
+    chart_type_str = chart.get("chart_type", "bar")
+    title = config.get("title", {}).get("text", "") if isinstance(config.get("title"), dict) else ""
+
+    if prefix:
+        doc.add_paragraph().add_run(f"{prefix} 图表").bold = True
+
+    # 提取 xAxis 类目和 series 数据
+    x_axis = config.get("xAxis", {}) or {}
+    if isinstance(x_axis, list):  # 多 xAxis 不支持, 取第一个
+        x_axis = x_axis[0] if x_axis else {}
+    categories = x_axis.get("data", []) or []
+    # 把日期格式 "MM/DD" 截断 (year 信息太长, docx bar 图不友好)
+    short_categories = []
+    for c in categories:
+        c_str = str(c)
+        if "/" in c_str and len(c_str) > 5:
+            c_str = c_str.split("/")[-1]  # 取 MM/DD
+        short_categories.append(c_str)
+
+    series_list = config.get("series", []) or []
+    if not categories or not series_list:
+        doc.add_paragraph("(图表数据为空)")
+        return
+
+    # 类型映射
+    type_map = {
+        "bar": XL_CHART_TYPE.BAR,
+        "line": XL_CHART_TYPE.LINE,
+        "pie": XL_CHART_TYPE.PIE,
+    }
+    xl_type = type_map.get(chart_type_str, XL_CHART_TYPE.BAR)
+
+    try:
+        chart_data = CategoryChartData()
+        chart_data.categories = short_categories
+        for s in series_list:
+            s_name = s.get("name", "数据")
+            s_data = s.get("data", [])
+            # pie 图只能有一个 series
+            if xl_type == XL_CHART_TYPE.PIE and len(chart_data.series) >= 1:
+                continue
+            chart_data.add_series(s_name, tuple(s_data))
+
+        # 插入图表 (6.5 英寸 × 3.5 英寸)
+        doc.add_paragraph()
+        if title:
+            doc.add_paragraph(f"标题: {title}")
+        doc.add_chart(xl_type, Inches(6.5), Inches(3.5), chart_data)
+    except Exception as e:
+        # 失败 fallback 到文字
+        doc.add_paragraph(f"(图表渲染失败: {e})")
+
+
 def _build_docx(report: dict, dataset: Optional[dict] = None) -> bytes:
     """把 report dict 渲染成 8 章节 .docx (Word) 文档, 返回字节"""
     from docx import Document
@@ -359,6 +422,11 @@ def _build_docx(report: dict, dataset: Optional[dict] = None) -> bytes:
                     cells[j].text = str(row.get(col, ""))
         else:
             doc.add_paragraph("(无数据)")
+
+        # 图表 (python-docx 原生 chart 支持)
+        charts = sec.get("charts") or []
+        for j, ch in enumerate(charts, 1):
+            _add_chart_to_doc(doc, ch, prefix=f"5.{i}.{j + 2}")
 
     # ==================== 第 6 章 异常与归因分析 ====================
     doc.add_heading("六、异常与归因分析", level=1)
