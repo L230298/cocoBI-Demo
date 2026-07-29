@@ -43,6 +43,8 @@ def md_to_html(md: str, *, include_style: bool = True, full_document: bool = Tru
         out.append(
             f'<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>cocoBI 报告</title>{_STYLE if include_style else ""}'
+            # echarts CDN 放在 head 里, 确保在 chart init 脚本前加载完
+            f'<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>'
             f'</head><body><div class="container">'
         )
 
@@ -149,9 +151,6 @@ def md_to_html(md: str, *, include_style: bool = True, full_document: bool = Tru
 
     close_list()
     if full_document:
-        # echarts CDN (只在完整文档时引入)
-        if any('id="chart-' in x for x in out):
-            out.append('<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>')
         out.append('<p class="footer">— 本报告由 cocoBI 自动生成 —</p>')
         out.append("</div></body></html>")
 
