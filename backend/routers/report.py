@@ -553,7 +553,7 @@ class ReportGenerateRequest(BaseModel):
     query_ids: List[str]
     dataset_id: str
     title: Optional[str] = None
-    format: str = "json"  # json | markdown | docx
+    format: str = "json"  # json | markdown | docx | html
 
 
 @router.post("/report/generate")
@@ -561,11 +561,11 @@ async def generate_report(req: ReportGenerateRequest):
     """基于选中的 query_ids 生成数据报告
 
     每个 query_id 对应一个历史查询,会重新执行 SQL 拿数据
-    format: json (默认) | markdown | docx
+    format: json (默认) | markdown | docx | html
     """
     if not req.query_ids:
         raise HTTPException(status_code=400, detail="query_ids 不能为空")
-    if req.format not in ("json", "markdown", "docx"):
+    if req.format not in ("json", "markdown", "docx", "html"):
         raise HTTPException(status_code=400, detail=f"不支持的 format: {req.format}")
 
     from services.session_service import get_recent_queries
@@ -661,4 +661,206 @@ async def generate_report(req: ReportGenerateRequest):
             },
         )
 
+    if req.format == "html":
+        # 返回 HTML, 前端直接在 modal 里显示
+        from services.markdown_renderer import md_to_html
+        md = _build_report_markdown(report, dataset)
+        html = md_to_html(md, full_document=True)
+        return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
+
     return report
+
+
+def _build_report_markdown(report: dict, dataset: dict) -> str:
+    """把 8 章节报告内容渲染成 markdown (供 HTML 预览用)"""
+    sections = report.get("sections", [])
+    dataset_name = (dataset or {}).get("name", report.get("dataset_id", "-"))
+    dataset_rows = (dataset or {}).get("row_count", 0)
+    dataset_cols_count = (dataset or {}).get("column_count", 0)
+    dataset_fields = (dataset or {}).get("fields", [])
+
+    lines: list[str] = []
+    lines.append(f"# {report.get('title', '数据分析报告')}")
+    lines.append("")
+    lines.append(f"> 数据集: **{dataset_name}** | 指标数: **{len(sections)}** | 生成时间: {report.get('generated_at', '-')}")
+    lines.append("")
+
+    # 1. 报告基本信息
+    lines.append("## 一、报告基本信息")
+    lines.append("| 项目 | 值 |")
+    lines.append("| --- | --- |")
+    lines.append(f"| 报告标题 | {report.get('title', '-')} |")
+    lines.append(f"| 数据集 ID | {report.get('dataset_id', '-')} |")
+    lines.append(f"| 数据集名称 | {dataset_name} |")
+    lines.append(f"| 生成时间 | {report.get('generated_at', '-')} |")
+    lines.append("")
+
+    # 2. 业务背景与分析目标
+    lines.append("## 二、业务背景与分析目标")
+    lines.append("**2.1 业务背景**")
+    lines.append(
+        f"本报告基于数据集「{dataset_name}」进行分析。"
+        f"该数据集共包含 {dataset_rows} 行 × {dataset_cols_count} 列业务数据,"
+        f"覆盖 {len(dataset_fields)} 个核心字段。"
+    )
+    lines.append("")
+    lines.append("**2.2 分析目标**")
+    if sections:
+        for i, sec in enumerate(sections, 1):
+            lines.append(f"{i}. {sec.get('query', 'N/A')}")
+    else:
+        lines.append("(本次未选取任何 query)")
+    lines.append("")
+
+    # 3. 指标体系与统计口径
+    lines.append("## 三、指标体系与统计口径")
+    used_intents = sorted({s.get("intent", "default") for s in sections if not s.get("error")})
+    if not used_intents:
+        used_intents = ["default"]
+    lines.append("| 指标类型 | 定义 | 统计口径 |")
+    lines.append("| --- | --- | --- |")
+    for intent in used_intents:
+        m = INTENT_METRICS.get(intent, INTENT_METRICS.get("default", {
+            "name": intent, "definition": "-", "caliber": "-"
+        }))
+        lines.append(f"| {m.get('name', intent)} | {m.get('definition', '-')} | {m.get('caliber', '-')} |")
+    lines.append("")
+
+    # 4. 数据来源与质量说明
+    lines.append("## 四、数据来源与质量说明")
+    lines.append("**4.1 数据源信息**")
+    lines.append("| 项目 | 值 |")
+    lines.append("| --- | --- |")
+    lines.append(f"| 数据来源 | {(dataset or {}).get('file_path', '未提供')} |")
+    lines.append(f"| 数据行数 | {dataset_rows} 行 |")
+    lines.append(f"| 字段数 | {dataset_cols_count} 个 |")
+    lines.append(f"| 上传时间 | {(dataset or {}).get('uploaded_at', '')} |")
+    lines.append(f"| 行业模板 | {(dataset or {}).get('industry_template', '通用')} |")
+    lines.append("")
+    lines.append("**4.2 数据质量评估**")
+    lines.append(f"- 完整度: 字段数 {dataset_cols_count} 个,数据行 {dataset_rows} 行。")
+    lines.append(f"- 时效性: 数据最后更新于 {(dataset or {}).get('uploaded_at', '')[:19] or '未知'}。")
+    lines.append("- 一致性: 报告内所有指标均来自同一数据源,口径一致。")
+    lines.append("- 唯一性: 主键去重处理,避免重复计数。")
+    lines.append("")
+    if dataset_fields:
+        lines.append("**4.3 字段说明**")
+        lines.append("| 字段名 | 类型 | 示例值 |")
+        lines.append("| --- | --- | --- |")
+        for f in dataset_fields:
+            lines.append(f"| {f.get('name', '-')} | {f.get('type', '-')} | {f.get('sample', '-')} |")
+        lines.append("")
+
+    # 5. 指标报表展示
+    lines.append("## 五、指标报表展示")
+    for i, sec in enumerate(sections, 1):
+        lines.append(f"### 5.{i} {sec.get('query', 'N/A')}")
+        lines.append(
+            f"**Intent**: {sec.get('intent', '-')} | "
+            f"**Rows**: {sec.get('row_count', 0)}"
+        )
+        lines.append("")
+        if sec.get("error"):
+            lines.append(f"> ❌ Error: {sec['error']}")
+            lines.append("")
+            continue
+        lines.append("**SQL 语句**")
+        lines.append("```sql")
+        lines.append(sec.get("sql", "-") or "-")
+        lines.append("```")
+        lines.append("")
+        cols = sec.get("columns", [])
+        rows = sec.get("rows", [])
+        if cols and rows:
+            lines.append("**查询结果**")
+            lines.append("| " + " | ".join(str(c) for c in cols) + " |")
+            lines.append("|" + "|".join(["---"] * len(cols)) + "|")
+            for row in rows[:20]:
+                cells = []
+                for c in cols:
+                    v = row.get(c, "") if isinstance(row, dict) else ""
+                    cells.append(str(v))
+                lines.append("| " + " | ".join(cells) + " |")
+            lines.append("")
+
+    # 6. 异常与归因分析
+    lines.append("## 六、异常与归因分析")
+    any_stats = False
+    for i, sec in enumerate(sections, 1):
+        if sec.get("error") or not sec.get("rows"):
+            continue
+        any_stats = True
+        lines.append(f"**6.{i} {sec.get('query', 'N/A')} - 数据特征**")
+        stats = _basic_stats(sec["rows"], sec.get("columns", []))
+        if not stats:
+            lines.append("(无可统计数据)")
+            continue
+        lines.append("| 字段 | 类型 | 关键指标 | 异常值数 |")
+        lines.append("| --- | --- | --- | --- |")
+        for col, s in stats.items():
+            if s.get("type") == "numeric":
+                key = f"min={s.get('min')}, max={s.get('max')}, avg={s.get('avg')}, σ={s.get('std')}"
+            elif s.get("type") == "categorical":
+                top3 = s.get("top3", [])
+                top3_str = ", ".join(f"{k}({v})" for k, v in top3)
+                key = f"distinct={s.get('distinct')}, top3: {top3_str}"
+            else:
+                key = "无数据"
+            lines.append(f"| {col} | {s.get('type', '-')} | {key} | {s.get('outliers', '-')} |")
+        lines.append("")
+    if not any_stats:
+        lines.append("(无足够数据进行异常分析)")
+        lines.append("")
+
+    # 7. 策略建议与行动计划
+    lines.append("## 七、策略建议与行动计划")
+    lines.append("**7.1 指标维度建议**")
+    for intent in used_intents:
+        m = INTENT_METRICS.get(intent, INTENT_METRICS.get("default", {}))
+        lines.append(f"- **{m.get('name', intent)}**")
+        tips = STRATEGY_TEMPLATES.get(intent, STRATEGY_TEMPLATES["default"])
+        for tip in tips:
+            lines.append(f"  - {tip}")
+    lines.append("")
+    lines.append("**7.2 行动计划**")
+    actions = [
+        ("短期(1 周内)", ["将本次报告的指标纳入周报,常态化跟踪", "对识别出的异常值做归因分析", "若有阈值告警,配置自动通知"]),
+        ("中期(1 个月内)", ["扩展分析维度(用户分层 / 渠道拆分)", "建立指标趋势基线,识别异常波动", "沉淀分析模板,提升复用率"]),
+        ("长期(1 季度内)", ["搭建指标体系,覆盖核心业务全链路", "结合 LLM 智能解读,提升分析深度", "形成数据驱动的决策机制"]),
+    ]
+    for phase, items in actions:
+        lines.append(f"- **{phase}**")
+        for it in items:
+            lines.append(f"  - {it}")
+    lines.append("")
+
+    # 8. 附录
+    lines.append("## 八、附录")
+    lines.append("**8.1 术语表**")
+    lines.append("| 术语 | 解释 |")
+    lines.append("| --- | --- |")
+    glossary = [
+        ("GMV", "Gross Merchandise Volume,商品交易总额"),
+        ("DAU", "Daily Active Users,日活跃用户数"),
+        ("MAU", "Monthly Active Users,月活跃用户数"),
+        ("ROI", "Return On Investment,投资回报率"),
+        ("HHI", "Herfindahl-Hirschman Index,品类集中度"),
+        ("SQL", "Structured Query Language,结构化查询语言"),
+        ("3σ 原则", "数值偏离均值超过 3 倍标准差视为异常"),
+    ]
+    for k, v in glossary:
+        lines.append(f"| {k} | {v} |")
+    lines.append("")
+    lines.append("**8.2 报告生成方式**")
+    lines.append("本报告由 cocoBI AI 数据分析助手自动生成,流程:")
+    lines.append("1. 用户在前端选择历史 query,提交生成报告请求")
+    lines.append("2. 后端根据 query_ids 从会话历史中恢复 SQL")
+    lines.append("3. 重新执行 SQL 获取最新数据")
+    lines.append("4. 加载数据集元数据,计算基础统计")
+    lines.append("5. 按 8 章节模板渲染输出")
+    lines.append("")
+    lines.append("**8.3 报告版本**")
+    lines.append(f"版本: v1.0    生成时间: {report.get('generated_at', '-')}")
+    lines.append("")
+
+    return "\n".join(lines)

@@ -7,6 +7,7 @@ import { ErrorDisplay } from './components/ErrorDisplay';
 import { Skeleton } from './components/Skeleton';
 import { HistoryPanel } from './components/HistoryPanel';
 import { UploadConfirmModal } from './components/UploadConfirmModal';
+import { ReportPreviewModal } from './components/ReportPreviewModal';
 import { STATE_MACHINE } from './utils/stateMachine';
 
 // 移到欢迎区的示例问题
@@ -31,6 +32,7 @@ function App() {
     clearHistory,
     editSql,
     generateReport,
+    downloadReport,
   } = useAnalysis();
 
   useEffect(() => {
@@ -57,6 +59,9 @@ function App() {
 
   // 用 ref 持有 resolve 回调, 因为 setState 后闭包会变
   const pendingUploadRef = useRef<{ resolve: (ok: boolean) => void } | null>(null);
+
+  // 报告预览弹窗 state
+  const [reportPreviewIds, setReportPreviewIds] = useState<string[] | null>(null);
 
   const handleUploadConfirm = async () => {
     if (pendingUploadRef.current) {
@@ -225,6 +230,7 @@ function App() {
               onFeedback={submitFeedback}
               onSqlEdited={editSql}
               onGenerateReport={async () => generateReport()}
+              onReportPreview={setReportPreviewIds}
             />
           )}
         </main>
@@ -247,6 +253,16 @@ function App() {
           columnCount={pendingUpload.preview.column_count || 0}
           onCancel={handleUploadCancel}
           onConfirm={handleUploadConfirm}
+        />
+      )}
+
+      {/* 数据分析报告预览弹窗 (浏览器内直接显示, 不再自动下载) */}
+      {reportPreviewIds && activeDataset && (
+        <ReportPreviewModal
+          queryIds={reportPreviewIds}
+          datasetId={activeDataset.dataset_id}
+          onClose={() => setReportPreviewIds(null)}
+          onDownload={async () => downloadReport(reportPreviewIds)}
         />
       )}
     </div>

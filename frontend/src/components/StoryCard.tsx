@@ -21,7 +21,8 @@ interface Props {
   onReset: () => void;
   onFeedback: (type: 'up' | 'down', extra?: { comment?: string; tags?: string[] }) => void;
   onSqlEdited?: (newSql: string) => Promise<{ ok: boolean; error?: string }>;
-  onGenerateReport?: () => Promise<void>;
+  onGenerateReport?: () => Promise<string[] | null>;
+  onReportPreview?: (ids: string[]) => void;
 }
 
 export function StoryCard({
@@ -39,6 +40,7 @@ export function StoryCard({
   onFeedback,
   onSqlEdited,
   onGenerateReport,
+  onReportPreview,
 }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -217,8 +219,10 @@ export function StoryCard({
           mode="single"
           onCancel={() => setReportOpen(false)}
           onConfirm={async () => {
-            await onGenerateReport();
+            const ids = await onGenerateReport();
             setReportOpen(false);
+            // ids 用于父组件打开 ReportPreviewModal
+            if (ids && onReportPreview) onReportPreview(ids);
           }}
         />
       )}

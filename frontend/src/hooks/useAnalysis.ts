@@ -222,16 +222,21 @@ export function useAnalysis() {
   );
 
   const generateReport = useCallback(async (queryIds?: string[]) => {
-    if (!activeDataset) return;
+    if (!activeDataset) return null;
     const ids = queryIds && queryIds.length > 0
       ? queryIds
       : history.slice(0, 50).map((h) => h.id);
     if (ids.length === 0) {
       alert('没有可生成报告的 query');
-      return;
+      return null;
     }
+    return ids;  // 返回 ids, 弹窗用
+  }, [activeDataset, history]);
+
+  const downloadReport = useCallback(async (queryIds: string[]) => {
+    if (!activeDataset) return;
     try {
-      const blob = await api.generateReport(ids, activeDataset.dataset_id, 'docx');
+      const blob = await api.generateReport(queryIds, activeDataset.dataset_id, 'docx');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -274,5 +279,6 @@ export function useAnalysis() {
     clearHistory,
     editSql,
     generateReport,
+    downloadReport,
   };
 }
