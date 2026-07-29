@@ -148,7 +148,12 @@ function App() {
           <h1>cocoBI</h1>
           <span className="tagline">AI 数据分析助手</span>
         </div>
-        <span className="version">v1.0.1 Demo</span>
+        <button
+          className="user-manage-btn"
+          onClick={() => alert('用户管理 - 演示版, 暂未实现')}
+        >
+          👤 用户管理
+        </button>
       </header>
 
       <div className="app-body">
