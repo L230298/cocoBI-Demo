@@ -175,21 +175,36 @@ def _add_chart_to_doc(doc, chart: dict, prefix: str = "") -> None:
     from matplotlib import font_manager
     from docx.shared import Inches
 
-    # 设置中文字体 (优先 Noto CJK, 找不到用 fallback)
+    # 设置中文字体 - 遍历常见 Noto CJK 安装路径, 用任何能 addfont 的
     cjk_candidates = [
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSerifCJK-Regular.ttc",
     ]
+    # 也搜整个 /usr/share/fonts 找 NotoSansCJK
+    import glob as _glob
+    cjk_candidates += _glob.glob("/usr/share/fonts/**/Noto*CJK*.ttc", recursive=True)
+    cjk_candidates += _glob.glob("/usr/share/fonts/**/Noto*CJK*.otf", recursive=True)
+
+    cjk_name = None
     for font_path in cjk_candidates:
         if Path(font_path).exists():
             try:
                 font_manager.fontManager.addfont(font_path)
-                plt.rcParams["font.sans-serif"] = ["Noto Sans CJK SC", "DejaVu Sans"]
-                plt.rcParams["axes.unicode_minus"] = False
-                break
+                # 查实际注册的 font family name
+                prop = font_manager.FontProperties(fname=font_path)
+                cjk_name = prop.get_name()
+                if cjk_name:
+                    break
             except Exception:
                 pass
+
+    if cjk_name:
+        plt.rcParams["font.sans-serif"] = [cjk_name, "Noto Sans CJK SC", "DejaVu Sans"]
+    else:
+        plt.rcParams["font.sans-serif"] = ["Noto Sans CJK SC", "DejaVu Sans"]
+    plt.rcParams["axes.unicode_minus"] = False
 
     config = chart.get("config") or {}
     chart_type_str = chart.get("chart_type", "bar")
