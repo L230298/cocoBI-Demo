@@ -162,12 +162,15 @@ def _basic_stats(rows: list[dict], cols: list[str]) -> dict[str, dict[str, Any]]
 
 # ==================== docx 渲染 ====================
 def _add_chart_to_doc(doc, chart: dict, prefix: str = "") -> None:
-    """把 echarts config 转成 python-docx 原生 chart 嵌入
+    """把 echarts config 转成 matplotlib PNG, 嵌进 docx
 
+    python-docx 1.1.2 没原生 chart 模块, 用 matplotlib 渲染 PNG 后用 add_picture 嵌入
     支持 bar/line/pie, 其他类型显示为占位文字
     """
-    from docx.chart.data import CategoryChartData
-    from docx.enum.chart import XL_CHART_TYPE
+    from io import BytesIO
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
     from docx.shared import Inches
 
     config = chart.get("config") or {}
@@ -179,15 +182,15 @@ def _add_chart_to_doc(doc, chart: dict, prefix: str = "") -> None:
 
     # 提取 xAxis 类目和 series 数据
     x_axis = config.get("xAxis", {}) or {}
-    if isinstance(x_axis, list):  # 多 xAxis 不支持, 取第一个
+    if isinstance(x_axis, list):
         x_axis = x_axis[0] if x_axis else {}
     categories = x_axis.get("data", []) or []
-    # 把日期格式 "MM/DD" 截断 (year 信息太长, docx bar 图不友好)
+    # 日期格式 "YYYY/M/D" 截断为 "M/D"
     short_categories = []
     for c in categories:
         c_str = str(c)
         if "/" in c_str and len(c_str) > 5:
-            c_str = c_str.split("/")[-1]  # 取 MM/DD
+            c_str = c_str.split("/")[-1]
         short_categories.append(c_str)
 
     series_list = config.get("series", []) or []
@@ -195,32 +198,50 @@ def _add_chart_to_doc(doc, chart: dict, prefix: str = "") -> None:
         doc.add_paragraph("(图表数据为空)")
         return
 
-    # 类型映射
-    type_map = {
-        "bar": XL_CHART_TYPE.BAR,
-        "line": XL_CHART_TYPE.LINE,
-        "pie": XL_CHART_TYPE.PIE,
-    }
-    xl_type = type_map.get(chart_type_str, XL_CHART_TYPE.BAR)
-
     try:
-        chart_data = CategoryChartData()
-        chart_data.categories = short_categories
-        for s in series_list:
-            s_name = s.get("name", "数据")
-            s_data = s.get("data", [])
-            # pie 图只能有一个 series
-            if xl_type == XL_CHART_TYPE.PIE and len(chart_data.series) >= 1:
-                continue
-            chart_data.add_series(s_name, tuple(s_data))
+        fig, ax = plt.subplots(figsize=(7, 3.5), dpi=150)
 
-        # 插入图表 (6.5 英寸 × 3.5 英寸)
-        doc.add_paragraph()
+        if chart_type_str == "pie":
+            s = series_list[0]
+            ax.pie(s.get("data", []), labels=short_categories, autopct="%1.1f%%", startangle=90)
+            ax.axis("equal")
+        elif chart_type_str == "line":
+            for s in series_list:
+                ax.plot(short_categories, s.get("data", []), marker="o", label=s.get("name", ""))
+            ax.legend(loc="best", fontsize=9)
+            if len(short_categories) > 5:
+                for label in ax.get_xticklabels():
+                    label.set_rotation(30)
+                    label.set_horizontalalignment("right")
+        else:  # bar (默认)
+            n_series = len(series_list)
+            if n_series == 1:
+                ax.bar(short_categories, series_list[0].get("data", []), label=series_list[0].get("name", ""), color="#5b6cff")
+            else:
+                import numpy as np
+                x = np.arange(len(short_categories))
+                width = 0.8 / n_series
+                for i, s in enumerate(series_list):
+                    ax.bar(x + i * width - 0.4 + width / 2, s.get("data", []), width, label=s.get("name", ""))
+                ax.set_xticks(x)
+                ax.set_xticklabels(short_categories, rotation=30 if len(short_categories) > 5 else 0,
+                                   ha="right" if len(short_categories) > 5 else "center")
+            ax.legend(loc="best", fontsize=9)
+
         if title:
-            doc.add_paragraph(f"标题: {title}")
-        doc.add_chart(xl_type, Inches(6.5), Inches(3.5), chart_data)
+            ax.set_title(title, fontsize=11)
+
+        buf = BytesIO()
+        plt.tight_layout()
+        fig.savefig(buf, format="png", bbox_inches="tight")
+        plt.close(fig)
+        buf.seek(0)
+
+        # 嵌进 docx (6.5 英寸宽, 高度自适应)
+        p = doc.add_paragraph()
+        p.alignment = 1  # center
+        p.add_run().add_picture(buf, width=Inches(6.5))
     except Exception as e:
-        # 失败 fallback 到文字
         doc.add_paragraph(f"(图表渲染失败: {e})")
 
 
