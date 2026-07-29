@@ -3,6 +3,7 @@
 """
 from __future__ import annotations
 import asyncio
+import re
 from typing import AsyncGenerator
 from .skills.intent_agent import IntentAgent
 from .skills.schema_agent import SchemaAgent
@@ -10,6 +11,88 @@ from .skills.nl2sql_agent import NL2SQLAgent
 from .skills.storytelling_agent import StorytellingAgent
 from tools import invoke_tool
 from services.session_service import record_query, update_query_sql, update_query_charts
+
+
+# Chitchat 关键词模式: 命中就直接返回功能介绍, 不走数据流
+_CHITCHAT_PATTERNS = [
+    ("功能", "FEATURES"),
+    ("你能做什么", "FEATURES"),
+    ("你能干嘛", "FEATURES"),
+    ("怎么用", "USAGE"),
+    ("怎么操作", "USAGE"),
+    ("怎么玩", "USAGE"),
+    ("怎么开始", "USAGE"),
+    ("怎么上手", "USAGE"),
+    ("使用指南", "USAGE"),
+    ("使用帮助", "USAGE"),
+    ("help", "USAGE"),
+    ("介绍", "FEATURES"),
+    ("你好", "GREETING"),
+    ("hi", "GREETING"),
+    ("hello", "GREETING"),
+    ("在吗", "GREETING"),
+    ("谢谢", "GREETING"),
+    ("thanks", "GREETING"),
+]
+
+_CHITCHAT_RESPONSES = {
+    "FEATURES": (
+        "我是 cocoBI, 你的 AI 数据分析助手! 🚀\n\n"
+        "**核心功能**:\n"
+        "1. 📊 **自然语言查询**: 直接问\"上周 GMV 多少?\"\"哪个品类卖得最好?\", 我帮你查数据\n"
+        "2. 📈 **自动图表**: 查询结果自动生成可视化图表 (柱状/折线/饼图)\n"
+        "3. 💡 **智能解读**: 给出数据洞察和策略建议\n"
+        "4. 📋 **下载报告**: 一键生成 8 章节 Word 数据分析报告 (.docx)\n"
+        "5. 🔍 **追问推荐**: 基于上下文给你下一步分析建议\n"
+        "6. 🔗 **分享链接**: 把分析结果发给同事\n\n"
+        "**怎么开始**:\n"
+        "① 上传你的 Excel / CSV 数据\n"
+        "② 用自然语言提问\n"
+        "③ 看自动生成的可视化和洞察"
+    ),
+    "USAGE": (
+        "**快速上手 cocoBI**:\n\n"
+        "① **上传数据** - 点输入框旁的 `+ 上传数据` 按钮, 选择 Excel (.xlsx) 或 CSV 文件\n"
+        "② **选数据集** - 顶部下拉选刚上传的数据集\n"
+        "③ **提问** - 用自然语言问, 例如:\n"
+        "   • \"上周 GMV 是多少?\"\n"
+        "   • \"最近什么卖得好?TOP 10\"\n"
+        "   • \"为什么这个月订单掉了?\"\n"
+        "④ **看结果** - 自动生成图表 + 数据洞察\n"
+        "⑤ **生成报告** - 点 `生成数据分析报告` 下载完整 .docx\n\n"
+        "💡 **小贴士**:\n"
+        "• 问题越具体越好 (带时间范围 / 维度)\n"
+        "• 不确定怎么问? 直接说\"你能做什么\"就行"
+    ),
+    "GREETING": (
+        "你好! 👋 我是 cocoBI 数据分析助手\n\n"
+        "我能帮你: 上传数据 → 自然语言提问 → 自动生成图表 + 报告\n\n"
+        "如果你是第一次用, 可以问我:\n"
+        "• \"你能做什么?\" - 看功能介绍\n"
+        "• \"怎么用?\" - 看上手指南\n"
+        "• 或者直接问\"上周 GMV 多少?\" 试试效果"
+    ),
+}
+
+
+def _detect_chitchat(user_input: str) -> dict | None:
+    """检测是否是闲聊/非数据问题, 命中返回 Chitchat 响应
+
+    返回: dict {title, summary} 或 None
+    """
+    text = (user_input or "").strip()
+    if not text or len(text) > 50:
+        # 太长一般是真问题, 不当闲聊
+        return None
+    for kw, resp_type in _CHITCHAT_PATTERNS:
+        if kw in text.lower():
+            content = _CHITCHAT_RESPONSES[resp_type]
+            return {
+                "type": resp_type,
+                "summary": content,
+                "title": "cocoBI 使用指南" if resp_type != "GREETING" else "你好",
+            }
+    return None
 
 
 class Orchestrator:
@@ -36,6 +119,15 @@ class Orchestrator:
         # ============ 阶段 1: IntentAgent ============
         yield {"event": "state_change", "state": "requesting", "message": "正在理解您的问题..."}
         await asyncio.sleep(0.1)
+
+        # Chitchat 快速通道: 命中关键词就直接返回功能介绍, 不走 LLM 也不走数据流
+        chitchat_resp = _detect_chitchat(user_input)
+        if chitchat_resp:
+            yield {"event": "intent", "data": {"intent": "Chitchat", "confidence": 1.0, "slots": {}, "alternatives": []}}
+            yield {"event": "chitchat", "data": chitchat_resp}
+            yield {"event": "state_change", "state": "completed", "message": "回复完成"}
+            yield {"event": "complete", "data": {"title": "cocoBI 使用指南", "summary": chitchat_resp["summary"], "chitchat": True}}
+            return
 
         intent_result = await self.intent_agent.run(
             user_input, session_history=history
