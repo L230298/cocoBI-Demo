@@ -44,11 +44,12 @@ async function extractErrorMessage(res: Response): Promise<string> {
 export const api = {
   // 数据集
   listDatasets: () => jsonFetch<{ success: boolean; data: DatasetInfo[] }>('/dataset/list'),
-  uploadDataset: async (file: File, name: string, industryTemplate = '通用'): Promise<DatasetInfo> => {
+  uploadDataset: async (file: File, name: string, industryTemplate = '通用', dryRun = false): Promise<DatasetInfo> => {
     const form = new FormData();
     form.append('file', file);
     form.append('dataset_name', name);
     form.append('industry_template', industryTemplate);
+    if (dryRun) form.append('dry_run', 'true');
     const res = await fetch(`${BASE_URL}/dataset/upload`, { method: 'POST', body: form });
     if (!res.ok) {
       throw new Error(await extractErrorMessage(res));

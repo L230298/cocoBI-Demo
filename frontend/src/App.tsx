@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAnalysis } from './hooks/useAnalysis';
 import { ChatInput } from './components/ChatInput';
 import { StoryCard } from './components/StoryCard';
@@ -6,6 +6,7 @@ import { StatusBar } from './components/StatusBar';
 import { ErrorDisplay } from './components/ErrorDisplay';
 import { Skeleton } from './components/Skeleton';
 import { HistoryPanel } from './components/HistoryPanel';
+import { UploadConfirmModal } from './components/UploadConfirmModal';
 import { STATE_MACHINE } from './utils/stateMachine';
 
 // 移到欢迎区的示例问题
@@ -35,6 +36,41 @@ function App() {
   useEffect(() => {
     refreshDatasets();
   }, []);
+
+  // 文件上传确认弹窗
+  const [pendingUpload, setPendingUpload] = useState<{
+    file: File;
+    name: string;
+    preview: any;
+  } | null>(null);
+
+  const handleUpload = async (file: File, name: string) => {
+    uploadFile(file, name, async (preview) => {
+      // 把文件暂存, 显示确认弹窗
+      setPendingUpload({ file, name, preview });
+      // 返回 Promise, 用户点确认才 resolve
+      return new Promise<boolean>((resolve) => {
+        pendingUploadRef.current = { resolve };
+      });
+    });
+  };
+
+  // 用 ref 持有 resolve 回调, 因为 setState 后闭包会变
+  const pendingUploadRef = useRef<{ resolve: (ok: boolean) => void } | null>(null);
+
+  const handleUploadConfirm = async () => {
+    if (pendingUploadRef.current) {
+      pendingUploadRef.current.resolve(true);
+    }
+    setPendingUpload(null);
+  };
+
+  const handleUploadCancel = () => {
+    if (pendingUploadRef.current) {
+      pendingUploadRef.current.resolve(false);
+    }
+    setPendingUpload(null);
+  };
 
   // URL 参数 ?q=xxx 自动填入 + 自动提交
   useEffect(() => {
@@ -197,10 +233,22 @@ function App() {
       <footer className="chat-footer">
         <ChatInput
           onSubmit={submitQuery}
-          onUpload={uploadFile}
+          onUpload={handleUpload}
           disabled={isLoading || state.appState === 'uploading'}
         />
       </footer>
+
+      {/* 文件上传确认弹窗 */}
+      {pendingUpload && (
+        <UploadConfirmModal
+          fileName={pendingUpload.file.name}
+          sheetName={pendingUpload.preview.sheet_name || '工作表 1'}
+          rowCount={pendingUpload.preview.row_count || 0}
+          columnCount={pendingUpload.preview.column_count || 0}
+          onCancel={handleUploadCancel}
+          onConfirm={handleUploadConfirm}
+        />
+      )}
     </div>
   );
 }

@@ -25,8 +25,12 @@ async def upload_dataset(
     file: UploadFile = File(...),
     dataset_name: str = Form(...),
     industry_template: str = Form("通用"),
+    dry_run: bool = Form(False),  # True = 只解析返回信息, 不保存
 ):
-    """上传 CSV/Excel 文件"""
+    """上传 CSV/Excel 文件
+    dry_run=True: 解析文件返回 sheet/行数/列数, 不持久化 (前端用来显示确认弹窗)
+    dry_run=False: 正常保存 + 注册
+    """
     if file.size and file.size > MAX_DATASET_SIZE_MB * 1024 * 1024:
         raise HTTPException(
             status_code=400,
@@ -43,7 +47,27 @@ async def upload_dataset(
     # 先读全部内容计算稳定 ID
     content = await file.read()
 
-    # 持久化文件(ID 来自内容 hash,而不是 uuid)
+    # dry_run: 只解析, 不写文件不注册
+    if dry_run:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = Path(tmp.name)
+        try:
+            info = parse_uploaded_file(tmp_path, dataset_name, industry_template, dataset_id_override="preview")
+            return {"success": True, "data": info, "dry_run": True}
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail={"error_code": "Dataset_FormatError", "error_msg": str(e)},
+            )
+        finally:
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+
+    # 正常上传: 持久化文件(ID 来自内容 hash,而不是 uuid)
     stable_id = _stable_id_from_bytes(content, suffix)
     save_path = Path(UPLOAD_DIR) / f"{stable_id}{suffix}"
     save_path.write_bytes(content)

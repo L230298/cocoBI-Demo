@@ -40,10 +40,17 @@ def load_dataset_to_sqlite(conn: sqlite3.Connection, dataset_id: str) -> None:
 
 def parse_uploaded_file(file_path: Path, dataset_name: str, industry_template: str = "通用", dataset_id_override: str | None = None) -> dict:
     """解析上传文件,提取 Schema 与样本,写入数据集注册表"""
+    sheet_name = "工作表 1"  # CSV 没有 sheet 概念, 统一用这个名字
+    sheet_names: list[str] = []
     if file_path.suffix.lower() == ".csv":
         df = pd.read_csv(file_path, nrows=1000)  # 抽样前 1000 行分析 Schema
     else:
+        # xlsx: 取所有 sheet 名, 默认读第一个
+        xls = pd.ExcelFile(file_path)
+        sheet_names = list(xls.sheet_names)
         df = pd.read_excel(file_path, nrows=1000)
+        if sheet_names:
+            sheet_name = str(sheet_names[0])
 
     df.columns = [c.strip() for c in df.columns]
     fields = []
@@ -86,6 +93,8 @@ def parse_uploaded_file(file_path: Path, dataset_name: str, industry_template: s
         "size_bytes": file_path.stat().st_size,
         "business_glossary": glossary,
         "uploaded_at": datetime.utcnow().isoformat(),
+        "sheet_name": sheet_name,
+        "sheet_count": len(sheet_names) if sheet_names else 1,
     }
 
     from .dataset_registry import register_dataset

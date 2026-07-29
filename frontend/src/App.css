@@ -850,6 +850,66 @@ body {
   outline: none;
   transition: border-color 0.15s ease;
 }
+
+/* ==================== 上传确认弹窗 ==================== */
+.upload-confirm-modal {
+  width: min(440px, 92vw) !important;
+  padding: 0;
+}
+.upload-confirm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
+}
+.upload-confirm-filename {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.upload-confirm-body {
+  padding: 20px 18px 18px;
+}
+.upload-confirm-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+.upload-confirm-icon {
+  color: #5b6cff;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.upload-confirm-info {
+  flex: 1;
+  min-width: 0;
+}
+.upload-confirm-sheet {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+.upload-confirm-dim {
+  font-size: 13px;
+  color: #6b7280;
+}
+.upload-confirm-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid #f3f4f6;
+  background: #fafbfc;
+}
 .feedback-textarea:focus {
   border-color: #5b6cff;
   box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.12);

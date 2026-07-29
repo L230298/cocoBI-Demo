@@ -49,9 +49,20 @@ export function useAnalysis() {
   }, [activeDataset]);
 
   const uploadFile = useCallback(
-    async (file: File, name: string) => {
-      setState((s) => ({ ...s, appState: 'uploading', statusMessage: '正在上传文件...' }));
+    async (file: File, name: string, onPreview?: (info: any) => Promise<boolean>) => {
+      setState((s) => ({ ...s, appState: 'uploading', statusMessage: '正在解析文件...' }));
       try {
+        // 1. 先 dry_run 解析, 让用户确认
+        const preview = await api.uploadDataset(file, name, '通用', true);
+        if (onPreview) {
+          const ok = await onPreview(preview);
+          if (!ok) {
+            setState({ ...INITIAL });
+            return;
+          }
+        }
+        // 2. 确认后真正上传
+        setState((s) => ({ ...s, statusMessage: '正在导入文件...' }));
         const ds = await api.uploadDataset(file, name);
         await refreshDatasets();
         setActiveDataset(ds);
