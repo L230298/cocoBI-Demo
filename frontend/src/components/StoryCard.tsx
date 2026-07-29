@@ -5,6 +5,7 @@ import { ChartRenderer } from './ChartRenderer';
 import { Copy, RotateCcw, ThumbsUp, ThumbsDown, Share2, Edit3, FileText } from 'lucide-react';
 import { EditSqlModal } from './EditSqlModal';
 import { GenerateReportModal } from './GenerateReportModal';
+import { FeedbackModal } from './FeedbackModal';
 
 interface Props {
   story: DataStory;
@@ -18,7 +19,7 @@ interface Props {
   onCopy: () => void;
   onShare: () => void;
   onReset: () => void;
-  onFeedback: (type: 'up' | 'down') => void;
+  onFeedback: (type: 'up' | 'down', extra?: { comment?: string; tags?: string[] }) => void;
   onSqlEdited?: (newSql: string) => Promise<{ ok: boolean; error?: string }>;
   onGenerateReport?: () => Promise<void>;
 }
@@ -41,6 +42,7 @@ export function StoryCard({
 }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [voted, setVoted] = useState<'up' | 'down' | null>(null);
   return (
     <div className="story-card">
@@ -180,10 +182,9 @@ export function StoryCard({
           className={`action-icon-btn${voted === 'down' ? ' voted' : ''}`}
           onClick={() => {
             if (voted) return;
-            setVoted('down');
-            onFeedback('down');
+            // 先开反馈弹窗, 用户提交后才算 voted
+            setFeedbackOpen(true);
           }}
-          disabled={voted !== null}
           title={voted === 'down' ? '已反馈' : '没用'}
           aria-label="没用"
         >
@@ -218,6 +219,16 @@ export function StoryCard({
           onConfirm={async () => {
             await onGenerateReport();
             setReportOpen(false);
+          }}
+        />
+      )}
+      {feedbackOpen && (
+        <FeedbackModal
+          onCancel={() => setFeedbackOpen(false)}
+          onSubmit={async (data) => {
+            setVoted('down');
+            onFeedback('down', data);
+            setFeedbackOpen(false);
           }}
         />
       )}

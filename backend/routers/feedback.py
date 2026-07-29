@@ -17,6 +17,7 @@ async def feedback(req: FeedbackRequest):
         query_id=req.query_id,
         feedback_type=req.feedback_type,
         comment=req.comment,
+        tags=req.tags,
     )
     return result
 

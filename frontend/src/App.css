@@ -806,3 +806,51 @@ body {
   border-bottom: none;
   background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
 }
+
+/* ==================== 反馈弹窗 ==================== */
+.feedback-modal {
+  width: min(440px, 92vw) !important;
+}
+.feedback-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.feedback-tag {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #4b5563;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.feedback-tag:hover {
+  border-color: #5b6cff;
+  color: #5b6cff;
+}
+.feedback-tag.selected {
+  background: #5b6cff;
+  border-color: #5b6cff;
+  color: #fff;
+}
+.feedback-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.feedback-textarea:focus {
+  border-color: #5b6cff;
+  box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.12);
+}

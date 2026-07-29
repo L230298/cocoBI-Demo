@@ -232,12 +232,17 @@ export function useAnalysis() {
     }
   }, [activeDataset, history]);
 
-  const submitFeedback = useCallback(async (feedback_type: 'up' | 'down') => {
+  const submitFeedback = useCallback(async (
+    feedback_type: 'up' | 'down',
+    extra?: { comment?: string; tags?: string[] }
+  ) => {
     if (!state.story) return;
     try {
       await api.feedback({
         query_id: state.story.story_id,
         feedback_type,
+        comment: extra?.comment,
+        tags: extra?.tags,
       });
     } catch (e) {
       console.error('Feedback failed:', e);

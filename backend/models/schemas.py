@@ -181,3 +181,4 @@ class FeedbackRequest(BaseModel):
     query_id: str
     feedback_type: Literal["up", "down", "correction"]
     comment: Optional[str] = None
+    tags: Optional[list[str]] = None  # 问题分类标签: 有害/不安全 / 虚假信息 / 没有帮助 / 其他

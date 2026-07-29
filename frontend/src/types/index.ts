@@ -107,4 +107,5 @@ export interface FeedbackPayload {
   query_id: string;
   feedback_type: 'up' | 'down' | 'correction';
   comment?: string;
+  tags?: string[];  // 反馈分类: 有害/不安全 / 虚假信息 / 没有帮助 / 其他
 }
