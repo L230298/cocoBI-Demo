@@ -86,7 +86,7 @@ def _render_markdown(story: dict) -> str:
             lines.append("| " + " | ".join(cells) + " |")
         lines.append("")
 
-    # 4. 图表
+    # 4. 图表 - 把 echarts config 嵌进 markdown, HTML 渲染时用 echarts 画
     charts = story.get("charts") or []
     if charts:
         lines.append(f"## 📊 数据图表 ({len(charts)} 张)")
@@ -94,7 +94,12 @@ def _render_markdown(story: dict) -> str:
             chart_type = ch.get("chart_type", "")
             config = ch.get("config") or {}
             title = config.get("title", {}).get("text", "") if isinstance(config.get("title"), dict) else ""
-            lines.append(f"- 图表 {i}: {title} ({chart_type})")
+            lines.append(f"### 图表 {i}: {title} ({chart_type})")
+            # 用特殊代码块标记, HTML 渲染器会识别
+            import json as _json
+            lines.append("```chart")
+            lines.append(_json.dumps(config, ensure_ascii=False, default=str))
+            lines.append("```")
         lines.append("")
 
     # 5. 可关注观察点

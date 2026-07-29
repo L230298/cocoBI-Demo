@@ -52,12 +52,16 @@ def _md_to_html(md: str) -> str:
 
     lines = md.split("\n")
     out = [f'<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-           f'<title>cocoBI 故事</title>{style}</head><body><div class="container">']
+           f'<title>cocoBI 故事</title>{style}'
+           # echarts via CDN, 用来渲染 markdown 里的 ```chart 块
+           f'<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>'
+           f'</head><body><div class="container">']
 
     in_code = False
     code_buf = []
     code_lang = ""
     in_list = False
+    chart_index = 0  # 图表序号, 给 div id 用
 
     def close_list():
         nonlocal in_list
@@ -101,7 +105,18 @@ def _md_to_html(md: str) -> str:
                 code_lang = line[3:].strip()
                 code_buf = []
             else:
-                out.append(f'<pre><code class="language-{code_lang}">{chr(10).join(code_buf)}</code></pre>')
+                # 特殊: ```chart 块渲染为 echarts div
+                if code_lang == "chart":
+                    import html as _html
+                    cid = f"chart-{chart_index}"
+                    chart_index += 1
+                    out.append(f'<div id="{cid}" class="chart" style="width:100%;height:360px;margin:16px 0"></div>')
+                    out.append(
+                        f'<script>if(window.echarts){{echarts.init(document.getElementById("{cid}")).setOption({chr(10).join(code_buf)});}}'
+                        f'else{{document.getElementById("{cid}").innerText="图表加载中...";}}</script>'
+                    )
+                else:
+                    out.append(f'<pre><code class="language-{code_lang}">{chr(10).join(code_buf)}</code></pre>')
                 in_code = False
                 code_buf = []
             i += 1
