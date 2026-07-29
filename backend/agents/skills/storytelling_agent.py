@@ -140,6 +140,12 @@ class StorytellingAgent(BaseAgent):
         story["next_steps"] = ns_result.get("next_steps", [])
         story["recommended_followups"] = ns_result.get("recommended_followups", [])
 
+        # 把全量上下文塞进 story, 分享页用得到
+        story["user_input"] = full_result.get("user_input", "")
+        story["intent"] = full_result.get("intent", "")
+        story["sql"] = full_result.get("sql", {}).get("sql", "") if isinstance(full_result.get("sql"), dict) else full_result.get("sql", "")
+        story["sql_result"] = sql_result
+
         # 导出(生成 share_url)
         export_result = await invoke_tool("export_data_story", story=story)
         if export_result.get("share_url"):

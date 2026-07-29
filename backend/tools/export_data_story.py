@@ -39,22 +39,90 @@ def export_data_story(story: dict) -> dict:
 
 
 def _render_markdown(story: dict) -> str:
-    lines = [f"# {story.get('title', '数据故事')}", "", f"> {story.get('summary', '')}", ""]
-    for sec in story.get("sections", []):
-        lines.append(f"## {sec.get('title', '')}")
-        lines.append(sec.get("description", ""))
+    """把数据故事的完整内容渲染成 markdown,供分享预览页用"""
+    lines = [f"# {story.get('title', '数据故事')}", ""]
+
+    # 1. 摘要 + 数据来源
+    summary = story.get("summary")
+    if isinstance(summary, list):
+        summary = " ".join(str(s) for s in summary)
+    if summary:
+        lines.append(f"> {summary}")
         lines.append("")
 
-    if story.get("observations"):
+    user_input = story.get("user_input")
+    if user_input:
+        lines.append(f"**用户问题**: {user_input}")
+    intent = story.get("intent")
+    if intent:
+        lines.append(f"**分析意图**: {intent}")
+    lines.append("")
+
+    # 2. SQL
+    sql = story.get("sql")
+    if sql:
+        lines.append("## 🔧 SQL 查询")
+        lines.append("```sql")
+        lines.append(sql)
+        lines.append("```")
+        lines.append("")
+
+    # 3. 数据明细
+    sql_result = story.get("sql_result") or {}
+    rows = sql_result.get("rows") or []
+    cols = sql_result.get("columns") or []
+    if rows and cols:
+        lines.append(f"## 📋 数据明细 ({len(rows)} 行)")
+        lines.append("| " + " | ".join(str(c) for c in cols) + " |")
+        lines.append("|" + "|".join(["---"] * len(cols)) + "|")
+        for r in rows[:30]:
+            cells = []
+            for c in cols:
+                v = r.get(c, "") if isinstance(r, dict) else ""
+                cells.append(str(v))
+            lines.append("| " + " | ".join(cells) + " |")
+        lines.append("")
+
+    # 4. 图表
+    charts = story.get("charts") or []
+    if charts:
+        lines.append(f"## 📊 数据图表 ({len(charts)} 张)")
+        for i, ch in enumerate(charts, 1):
+            chart_type = ch.get("chart_type", "")
+            config = ch.get("config") or {}
+            title = config.get("title", {}).get("text", "") if isinstance(config.get("title"), dict) else ""
+            lines.append(f"- 图表 {i}: {title} ({chart_type})")
+        lines.append("")
+
+    # 5. 可关注观察点
+    observations = story.get("observations") or []
+    if observations:
         lines.append("## 💡 可关注观察点")
-        for obs in story["observations"]:
-            lines.append(f"- {obs.get('text', '')}")
+        for obs in observations:
+            text = obs.get("text", "") if isinstance(obs, dict) else str(obs)
+            lines.append(f"- {text}")
         lines.append("")
 
-    if story.get("next_steps"):
+    # 6. 下一步建议
+    next_steps = story.get("next_steps") or []
+    if next_steps:
         lines.append("## 🎯 下一步建议")
-        for step in story["next_steps"]:
-            lines.append(f"- {step.get('text', '')}")
+        for step in next_steps:
+            text = step.get("text", "") if isinstance(step, dict) else str(step)
+            lines.append(f"- {text}")
         lines.append("")
+
+    # 7. 推荐追问
+    followups = story.get("recommended_followups") or []
+    if followups:
+        lines.append("## 🔍 推荐追问")
+        for f in followups:
+            text = f.get("text", "") if isinstance(f, dict) else str(f)
+            lines.append(f"- {text}")
+        lines.append("")
+
+    # 8. 页脚
+    lines.append("---")
+    lines.append("*本数据故事由 cocoBI AI 数据分析助手自动生成*")
 
     return "\n".join(lines)
