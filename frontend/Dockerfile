@@ -24,3 +24,4 @@ ENV BACKEND_URL=https://cocobi-backend-production.up.railway.app
 EXPOSE 4173
 CMD ["node", "server.cjs"]
 # Rebuild Wed Jul 29 18:43:39     2026
+# rebuild trigger 1785325817
