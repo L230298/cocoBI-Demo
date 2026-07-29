@@ -9,7 +9,7 @@ from .skills.schema_agent import SchemaAgent
 from .skills.nl2sql_agent import NL2SQLAgent
 from .skills.storytelling_agent import StorytellingAgent
 from tools import invoke_tool
-from services.session_service import record_query, update_query_sql
+from services.session_service import record_query, update_query_sql, update_query_charts
 
 
 class Orchestrator:
@@ -134,3 +134,7 @@ class Orchestrator:
 
         yield {"event": "state_change", "state": "completed", "message": "分析完成"}
         yield {"event": "complete", "data": story}
+
+        # 把 charts 回填到 session, 报告功能要用
+        if query_id and story.get("charts"):
+            update_query_charts(user_id, query_id, story.get("charts") or [])

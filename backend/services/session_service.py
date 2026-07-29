@@ -40,3 +40,12 @@ def update_query_sql(user_id: str, query_id: str, sql: str) -> None:
             if q.get("id") == query_id:
                 q["sql"] = sql
                 return
+
+
+def update_query_charts(user_id: str, query_id: str, charts: list) -> None:
+    """Storytelling Agent 生成图表后, 回填到 history(报告功能靠这个渲染图表)"""
+    with _LOCK:
+        for q in _QUERIES.get(user_id, []):
+            if q.get("id") == query_id:
+                q["charts"] = charts
+                return

@@ -605,6 +605,7 @@ async def generate_report(req: ReportGenerateRequest):
                 "rows": rows[:100],
                 "row_count": len(rows),
                 "timestamp": q.get("timestamp"),
+                "charts": q.get("charts", []) or [],  # 图表配置 (从 session 里拿)
             })
         except Exception as e:
             sections.append({
@@ -782,6 +783,20 @@ def _build_report_markdown(report: dict, dataset: dict) -> str:
                     cells.append(str(v))
                 lines.append("| " + " | ".join(cells) + " |")
             lines.append("")
+
+        # 图表 (从 session 里存的 charts 配置)
+        charts = sec.get("charts") or []
+        if charts:
+            import json as _json
+            for j, ch in enumerate(charts, 1):
+                chart_type = ch.get("chart_type", "")
+                config = ch.get("config") or {}
+                title = config.get("title", {}).get("text", "") if isinstance(config.get("title"), dict) else ""
+                lines.append(f"**图表 {j}: {title} ({chart_type})**")
+                lines.append("```chart")
+                lines.append(_json.dumps(config, ensure_ascii=False, default=str))
+                lines.append("```")
+                lines.append("")
 
     # 6. 异常与归因分析
     lines.append("## 六、异常与归因分析")
