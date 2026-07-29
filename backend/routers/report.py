@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import statistics
 from io import BytesIO
+from pathlib import Path
 from typing import Optional, List, Any
 
 from fastapi import APIRouter, HTTPException
@@ -171,7 +172,24 @@ def _add_chart_to_doc(doc, chart: dict, prefix: str = "") -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib import font_manager
     from docx.shared import Inches
+
+    # 设置中文字体 (优先 Noto CJK, 找不到用 fallback)
+    cjk_candidates = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+    ]
+    for font_path in cjk_candidates:
+        if Path(font_path).exists():
+            try:
+                font_manager.fontManager.addfont(font_path)
+                plt.rcParams["font.sans-serif"] = ["Noto Sans CJK SC", "DejaVu Sans"]
+                plt.rcParams["axes.unicode_minus"] = False
+                break
+            except Exception:
+                pass
 
     config = chart.get("config") or {}
     chart_type_str = chart.get("chart_type", "bar")

@@ -6,6 +6,7 @@ WORKDIR /app
 # 系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # Python 依赖(利用 Docker 层缓存)
