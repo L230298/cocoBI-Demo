@@ -156,6 +156,23 @@ export const api = {
 
   // 工具列表(调试)
   listTools: () => jsonFetch<{ success: boolean; data: any[] }>('/tools'),
+
+  // 用户管理 (SQLite 持久化)
+  listUsers: () => jsonFetch<{ id: string; name: string; email: string; role: string; created_at: string }[]>(
+    '/user/list'
+  ),
+  addUser: (payload: { name: string; email: string; role?: string }) =>
+    jsonFetch<{ id: string; name: string; email: string; role: string; created_at: string }>(
+      '/user/add',
+      { method: 'POST', body: JSON.stringify(payload) }
+    ),
+  updateUser: (id: string, payload: { name?: string; email?: string; role?: string }) =>
+    jsonFetch<{ id: string; name: string; email: string; role: string; created_at: string }>(
+      `/user/${id}`,
+      { method: 'PUT', body: JSON.stringify(payload) }
+    ),
+  deleteUser: (id: string) =>
+    jsonFetch<{ success: boolean }>(`/user/${id}`, { method: 'DELETE' }),
 };
 
 // 在生产环境方便调试 —— 暴露 BASE_URL 到 window

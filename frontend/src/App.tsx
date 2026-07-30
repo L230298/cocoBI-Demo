@@ -8,6 +8,7 @@ import { Skeleton } from './components/Skeleton';
 import { HistoryPanel } from './components/HistoryPanel';
 import { UploadConfirmModal } from './components/UploadConfirmModal';
 import { ReportPreviewModal } from './components/ReportPreviewModal';
+import { UserManagementModal } from './components/UserManagementModal';
 import { STATE_MACHINE } from './utils/stateMachine';
 
 // 移到欢迎区的示例问题
@@ -62,6 +63,8 @@ function App() {
 
   // 报告预览弹窗 state
   const [reportPreviewIds, setReportPreviewIds] = useState<string[] | null>(null);
+  // 用户管理弹窗 state
+  const [userManageOpen, setUserManageOpen] = useState(false);
 
   const handleUploadConfirm = async () => {
     if (pendingUploadRef.current) {
@@ -150,7 +153,7 @@ function App() {
         </div>
         <button
           className="user-manage-btn"
-          onClick={() => alert('用户管理 - 演示版, 暂未实现')}
+          onClick={() => setUserManageOpen(true)}
         >
           👤 用户管理
         </button>
@@ -269,6 +272,9 @@ function App() {
           onClose={() => setReportPreviewIds(null)}
           onDownload={async () => downloadReport(reportPreviewIds)}
         />
+      )}
+      {userManageOpen && (
+        <UserManagementModal onCancel={() => setUserManageOpen(false)} />
       )}
     </div>
   );
