@@ -36,9 +36,10 @@ DATA_DIR = _BASE_DIR
 SAMPLES_DIR = _BASE_DIR / "samples"
 UPLOAD_DIR = _BASE_DIR / "uploads"
 EXPORT_DIR = _BASE_DIR / "exports"
+LOG_DIR = _BASE_DIR / "logs"
 
 # 确保目录存在
-for d in [DATA_DIR, SAMPLES_DIR, UPLOAD_DIR, EXPORT_DIR]:
+for d in [DATA_DIR, SAMPLES_DIR, UPLOAD_DIR, EXPORT_DIR, LOG_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 

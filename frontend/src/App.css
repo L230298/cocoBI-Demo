@@ -1022,6 +1022,10 @@ body {
   align-items: center;
   margin-bottom: 14px;
 }
+.user-manage-actions {
+  display: flex;
+  gap: 8px;
+}
 .user-manage-count {
   color: #6b7280;
   font-size: 13px;

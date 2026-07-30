@@ -2,12 +2,13 @@
 from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from config import HOST, PORT, CORS_ORIGINS, SAMPLES_DIR
+from config import HOST, PORT, CORS_ORIGINS, SAMPLES_DIR, LOG_DIR
 from routers import chat, dataset, story, feedback, report, user
 
 # 导入所有工具以触发注册 - PRD §3.3.1
@@ -20,8 +21,23 @@ from tools import get_recent_queries  # noqa: F401
 from tools import collect_user_feedback  # noqa: F401
 from tools import generate_next_steps  # noqa: F401
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+# 日志: 控制台 + 文件 (按大小轮转, 保留最近 5 个 × 5MB)
+_file_handler = RotatingFileHandler(
+    LOG_DIR / "app.log",
+    maxBytes=5 * 1024 * 1024,
+    backupCount=5,
+    encoding="utf-8",
+)
+_file_handler.setFormatter(
+    logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(), _file_handler],
+)
 logger = logging.getLogger(__name__)
+logger.info(f"日志初始化: {LOG_DIR / 'app.log'}")
 
 
 @asynccontextmanager
@@ -108,6 +124,38 @@ async def root():
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/log/download")
+async def download_log():
+    """下载应用日志 - 支持日志数据导出"""
+    from fastapi.responses import FileResponse
+    from config import LOG_DIR
+    log_file = LOG_DIR / "app.log"
+    if not log_file.exists():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="日志文件不存在")
+    return FileResponse(
+        path=str(log_file),
+        media_type="text/plain",
+        filename=f"cocoBI-app-{__import__('datetime').datetime.utcnow().strftime('%Y%m%d')}.log",
+    )
+
+
+@app.get("/api/log/list")
+async def list_logs():
+    """列出所有日志文件 (含轮转的)"""
+    from config import LOG_DIR
+    files = []
+    for f in LOG_DIR.glob("app.log*"):
+        stat = f.stat()
+        files.append({
+            "name": f.name,
+            "size_bytes": stat.st_size,
+            "modified": __import__("datetime").datetime.fromtimestamp(stat.st_mtime).isoformat(),
+        })
+    files.sort(key=lambda x: x["modified"], reverse=True)
+    return {"log_dir": str(LOG_DIR), "files": files}
 
 
 if __name__ == "__main__":

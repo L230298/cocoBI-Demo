@@ -1,6 +1,6 @@
 // 用户管理弹窗 - 增删改查 + 角色 (admin/user)
 import { useEffect, useState } from 'react';
-import { X, Plus, Edit2, Trash2, User as UserIcon } from 'lucide-react';
+import { X, Plus, Edit2, Trash2, User as UserIcon, Download } from 'lucide-react';
 import { api } from '../api/client';
 
 interface User {
@@ -78,6 +78,23 @@ export function UserManagementModal({ onCancel }: Props) {
     }
   };
 
+  const handleDownloadLog = async () => {
+    try {
+      const res = await fetch(`${(window as any).__API_BASE__ || ''}/log/download`);
+      if (!res.ok) throw new Error('下载失败');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const date = new Date().toISOString().slice(0, 10);
+      a.download = `cocoBI-app-${date}.log`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert('日志下载失败: ' + (e.message || ''));
+    }
+  };
+
   return (
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="modal-content user-manage-modal" onClick={(e) => e.stopPropagation()}>
@@ -94,9 +111,14 @@ export function UserManagementModal({ onCancel }: Props) {
         <div className="modal-body user-manage-body">
           <div className="user-manage-toolbar">
             <span className="user-manage-count">共 {users.length} 个用户</span>
-            <button className="action-btn primary" onClick={openAdd}>
-              <Plus size={14} /> 新增用户
-            </button>
+            <div className="user-manage-actions">
+              <button className="action-btn" onClick={handleDownloadLog} title="下载应用日志">
+                <Download size={14} /> 下载日志
+              </button>
+              <button className="action-btn primary" onClick={openAdd}>
+                <Plus size={14} /> 新增用户
+              </button>
+            </div>
           </div>
 
           {showForm && (
