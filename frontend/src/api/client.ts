@@ -7,6 +7,9 @@ import type { DatasetInfo, SSEEvent, FeedbackPayload } from '../types';
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api';
 const ABSOLUTE_BASE = BASE_URL.startsWith('http');
 
+// 暴露给页面其他地方使用,避免在多处硬编码路径
+export const API_BASE_URL = BASE_URL;
+
 async function jsonFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${url}`, {
     ...options,
@@ -173,6 +176,20 @@ export const api = {
     ),
   deleteUser: (id: string) =>
     jsonFetch<{ success: boolean }>(`/user/${id}`, { method: 'DELETE' }),
+
+  // 日志下载 - 直接以 blob 返回,文件名后端在 Content-Disposition 里给了
+  // 这里单独处理:不走 jsonFetch,因为需要拿原始 blob
+  downloadLog: async (): Promise<Blob> => {
+    const res = await fetch(`${BASE_URL}/log/download`);
+    if (!res.ok) {
+      throw new Error(`日志下载失败 (HTTP ${res.status})`);
+    }
+    return res.blob();
+  },
+
+  // 列出所有日志文件(含轮转的)
+  listLogs: (): Promise<{ log_dir: string; files: { name: string; size_bytes: number; modified: string }[] }> =>
+    jsonFetch('/log/list'),
 };
 
 // 在生产环境方便调试 —— 暴露 BASE_URL 到 window

@@ -1,7 +1,7 @@
-// 用户管理弹窗 - 增删改查 + 角色 (admin/user)
+// 用户管理弹窗 - 增删改查 + 角色 (admin/user) + 日志下载
 import { useEffect, useState } from 'react';
-import { X, Plus, Edit2, Trash2, User as UserIcon, Download } from 'lucide-react';
-import { api } from '../api/client';
+import { X, Plus, Edit2, Trash2, User as UserIcon, Download, FileText, RefreshCw } from 'lucide-react';
+import { api, API_BASE_URL } from '../api/client';
 
 interface User {
   id: string;
@@ -80,9 +80,7 @@ export function UserManagementModal({ onCancel }: Props) {
 
   const handleDownloadLog = async () => {
     try {
-      const res = await fetch(`${(window as any).__API_BASE__ || ''}/log/download`);
-      if (!res.ok) throw new Error('下载失败');
-      const blob = await res.blob();
+      const blob = await api.downloadLog();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -93,6 +91,37 @@ export function UserManagementModal({ onCancel }: Props) {
     } catch (e: any) {
       alert('日志下载失败: ' + (e.message || ''));
     }
+  };
+
+  // 日志列表(轮转的也能选)
+  const [logFiles, setLogFiles] = useState<{ name: string; size_bytes: number; modified: string }[]>([]);
+  const [logLoading, setLogLoading] = useState(false);
+
+  const loadLogs = async () => {
+    setLogLoading(true);
+    try {
+      const data = await api.listLogs();
+      setLogFiles(data.files);
+    } catch (e: any) {
+      console.warn('加载日志列表失败:', e.message);
+    } finally {
+      setLogLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadLogs();
+  }, []);
+
+  const handleDownloadLogFile = (filename: string) => {
+    // 直接打开下载链接(浏览器处理)
+    window.open(`${API_BASE_URL}/log/download?file=${encodeURIComponent(filename)}`, '_blank');
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   };
 
   return (
@@ -112,14 +141,63 @@ export function UserManagementModal({ onCancel }: Props) {
           <div className="user-manage-toolbar">
             <span className="user-manage-count">共 {users.length} 个用户</span>
             <div className="user-manage-actions">
-              <button className="action-btn" onClick={handleDownloadLog} title="下载应用日志">
-                <Download size={14} /> 下载日志
+              <button className="action-btn" onClick={handleDownloadLog} title="下载当前日志 (app.log)">
+                <Download size={14} /> 下载当前日志
               </button>
               <button className="action-btn primary" onClick={openAdd}>
                 <Plus size={14} /> 新增用户
               </button>
             </div>
           </div>
+
+          {/* 日志文件列表 (含轮转历史) */}
+          <details className="log-files-section">
+            <summary>
+              <FileText size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+              日志文件 ({logFiles.length} 个, 累计 {formatSize(logFiles.reduce((s, f) => s + f.size_bytes, 0))})
+              <button
+                className="user-icon-btn"
+                style={{ marginLeft: 8 }}
+                onClick={(e) => { e.preventDefault(); loadLogs(); }}
+                title="刷新"
+              >
+                <RefreshCw size={12} className={logLoading ? 'spin' : ''} />
+              </button>
+            </summary>
+            {logFiles.length === 0 ? (
+              <div className="log-files-empty">暂无日志文件</div>
+            ) : (
+              <table className="log-files-table">
+                <thead>
+                  <tr>
+                    <th>文件名</th>
+                    <th>大小</th>
+                    <th>更新时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logFiles.map((f) => (
+                    <tr key={f.name}>
+                      <td><code>{f.name}</code></td>
+                      <td>{formatSize(f.size_bytes)}</td>
+                      <td className="user-time">{f.modified.replace('T', ' ').slice(0, 16)}</td>
+                      <td>
+                        <button
+                          className="user-icon-btn"
+                          onClick={() => handleDownloadLogFile(f.name)}
+                          title={`下载 ${f.name}`}
+                          aria-label="下载"
+                        >
+                          <Download size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </details>
 
           {showForm && (
             <div className="user-form">

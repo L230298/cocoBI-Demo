@@ -127,18 +127,34 @@ async def health():
 
 
 @app.get("/api/log/download")
-async def download_log():
-    """下载应用日志 - 支持日志数据导出"""
+async def download_log(file: str | None = None):
+    """下载应用日志 - 支持下载当前日志或轮转历史日志
+
+    - 不传 file: 下载 app.log(当前正在写的)
+    - 传 file=app.log.1 / app.log.2 ... : 下载对应的轮转备份
+    """
     from fastapi.responses import FileResponse
+    from fastapi import HTTPException
+    import re
     from config import LOG_DIR
-    log_file = LOG_DIR / "app.log"
+
+    if file is None:
+        log_file = LOG_DIR / "app.log"
+        display_name = f"cocoBI-app-{__import__('datetime').datetime.utcnow().strftime('%Y%m%d')}.log"
+    else:
+        # 安全检查: 只允许 app.log / app.log.N(N 是数字),防路径穿越
+        if not re.fullmatch(r"app\.log(\.\d+)?", file):
+            raise HTTPException(status_code=400, detail=f"非法的日志文件名: {file}")
+        log_file = LOG_DIR / file
+        display_name = f"cocoBI-{file}"
+
     if not log_file.exists():
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="日志文件不存在")
+        raise HTTPException(status_code=404, detail=f"日志文件不存在: {display_name}")
+
     return FileResponse(
         path=str(log_file),
         media_type="text/plain",
-        filename=f"cocoBI-app-{__import__('datetime').datetime.utcnow().strftime('%Y%m%d')}.log",
+        filename=display_name,
     )
 
 

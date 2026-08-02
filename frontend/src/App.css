@@ -1159,3 +1159,64 @@ body {
   gap: 8px;
   margin-top: 12px;
 }
+
+/* ==================== 日志文件列表 (含轮转历史) ==================== */
+.log-files-section {
+  margin-bottom: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #fafbfc;
+}
+.log-files-section > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: #4b5563;
+  font-weight: 500;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.log-files-section > summary:hover {
+  color: #1f2937;
+}
+.log-files-empty {
+  text-align: center;
+  color: #9ca3af;
+  padding: 16px 0;
+  font-size: 13px;
+}
+.log-files-table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.log-files-table th,
+.log-files-table td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid #f3f4f6;
+}
+.log-files-table th {
+  background: #f9fafb;
+  color: #6b7280;
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.log-files-table tr:last-child td {
+  border-bottom: none;
+}
+.log-files-table code {
+  background: #f3f4f6;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: #4b5563;
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
