@@ -249,41 +249,6 @@ body {
   background: #4f5fe8;
 }
 
-.chart-table-wrapper {
-  max-height: 320px;
-  overflow: auto;
-}
-.chart-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.chart-table th,
-.chart-table td {
-  padding: 6px 12px;
-  text-align: left;
-  border-bottom: 1px solid #e5e7eb;
-}
-.chart-table thead th {
-  position: sticky;
-  top: 0;
-  background: #f9fafb;
-  color: #374151;
-  font-weight: 600;
-  font-size: 12px;
-  z-index: 1;
-}
-.chart-table tbody tr:hover {
-  background: #f9fafb;
-}
-.chart-table code {
-  background: #f3f4f6;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 11px;
-  color: #6b7280;
-}
-
 .data-table-wrapper { overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .data-table th, .data-table td {

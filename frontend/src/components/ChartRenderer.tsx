@@ -1,9 +1,10 @@
-// 图表渲染 - ECharts + 表格切换 - PRD §3.4.4
+// 图表渲染 - ECharts - PRD §3.4.4
+// 支持三种视图切换: 柱状图 / 折线图 / 饼图
 import ReactECharts from 'echarts-for-react';
 import { useState, useMemo } from 'react';
-import { BarChart3, LineChart, PieChart, Table } from 'lucide-react';
+import { BarChart3, LineChart, PieChart } from 'lucide-react';
 
-type DisplayMode = 'bar' | 'line' | 'pie' | 'table';
+type DisplayMode = 'bar' | 'line' | 'pie';
 
 interface Props {
   chartConfig: any;
@@ -32,14 +33,15 @@ export function ChartRenderer({ chartConfig }: Props) {
     return { labels, values, title: cfg.title?.text || '' };
   }, [cfg]);
 
-  // 初始按后端推荐的类型
-  const [mode, setMode] = useState<DisplayMode>(backendType);
+  // 初始按后端推荐的类型 (但只在 bar/line/pie 范围内)
+  const [mode, setMode] = useState<DisplayMode>(
+    (['bar', 'line', 'pie'] as DisplayMode[]).includes(backendType) ? backendType : 'bar'
+  );
 
   if (!cfg || !labels.length) {
     return <div className="chart-empty">暂无图表数据</div>;
   }
 
-  // 构造不同模式下的 ECharts option
   const option = buildOption(mode, labels, values, title);
 
   return (
@@ -67,45 +69,15 @@ export function ChartRenderer({ chartConfig }: Props) {
         >
           <PieChart size={12} /> 饼图
         </button>
-        <button
-          className={`chart-tab ${mode === 'table' ? 'active' : ''}`}
-          onClick={() => setMode('table')}
-          title="表格视图"
-        >
-          <Table size={12} /> 表格
-        </button>
       </div>
 
-      {mode === 'table' ? (
-        <div className="chart-table-wrapper">
-          <table className="chart-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>{title || '类目'}</th>
-                <th style={{ textAlign: 'right' }}>数值</th>
-              </tr>
-            </thead>
-            <tbody>
-              {labels.map((label, i) => (
-                <tr key={i}>
-                  <td><code>{i + 1}</code></td>
-                  <td>{label}</td>
-                  <td style={{ textAlign: 'right' }}>{values[i].toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <ReactECharts
-          key={mode}
-          option={option}
-          style={{ height: '320px', width: '100%' }}
-          notMerge={true}
-          lazyUpdate={true}
-        />
-      )}
+      <ReactECharts
+        key={mode}
+        option={option}
+        style={{ height: '320px', width: '100%' }}
+        notMerge={true}
+        lazyUpdate={true}
+      />
     </div>
   );
 }
