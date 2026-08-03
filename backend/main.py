@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import HOST, PORT, CORS_ORIGINS, SAMPLES_DIR, LOG_DIR
+from services.analytics import ANALYTICS_DIR
 from routers import chat, dataset, story, feedback, report, user
 
 # 导入所有工具以触发注册 - PRD §3.3.1
@@ -195,14 +196,20 @@ async def download_log(
     since: str | None = None,
     until: str | None = None,
 ):
-    """下载应用日志 - 支持下载当前日志或轮转历史日志
+    """下载日志 / 埋点数据
 
-    - 不传 file: 下载 app.log(当前正在写的)
-    - 传 file=app.log.1 / app.log.2 ... : 下载对应的轮转备份
-    - format=text (默认): 原始文本
-    - format=csv: 转成 CSV (UTF-8 BOM, Excel 友好) 列: line/timestamp/level/logger/message
-    - since/until: 时间范围过滤 (ISO 8601, UTC), 例如 since=2026-08-03T00:00:00Z
-      多行 traceback 跟首行同一记录, 整段保留或整段丢弃
+    支持的文件(file 参数):
+    - 不传: app.log(当前正在写的应用日志)
+    - app.log / app.log.N (N=1,2,3...): 应用日志 (含轮转历史)
+    - events.jsonl: 埋点事件 (每行一个 JSON, 14 个字段)
+
+    支持的格式(format 参数):
+    - text (默认): 原始文本 / JSONL
+    - csv: 转成 CSV (UTF-8 BOM, Excel 友好)
+
+    since/until: ISO 8601 UTC 时间范围过滤
+    - app.log: 按日志首行时间戳
+    - events.jsonl: 按 events.time 字段
     """
     from fastapi.responses import FileResponse, Response
     from fastapi import HTTPException
@@ -212,25 +219,31 @@ async def download_log(
     from datetime import datetime, timezone
     from config import LOG_DIR
 
-    if file is None:
+    # ---------- 1. 解析目标文件 ----------
+    is_events = (file == "events.jsonl")
+    if file is None or file == "app.log":
         log_file = LOG_DIR / "app.log"
-        display_name = f"cocoBI-app-{datetime.utcnow().strftime('%Y%m%d')}.log"
-    else:
-        # 安全检查: 只允许 app.log / app.log.N(N 是数字),防路径穿越
-        if not re.fullmatch(r"app\.log(\.\d+)?", file):
-            raise HTTPException(status_code=400, detail=f"非法的日志文件名: {file}")
+        base_name = "cocoBI-app"
+        ext = "log"
+    elif re.fullmatch(r"app\.log(\.\d+)?", file):
         log_file = LOG_DIR / file
-        display_name = f"cocoBI-{file}"
+        base_name = "cocoBI-app"
+        ext = "log"
+    elif is_events:
+        log_file = ANALYTICS_DIR / "events.jsonl"
+        base_name = "cocoBI-events"
+        ext = "jsonl"
+    else:
+        raise HTTPException(status_code=400, detail=f"非法的文件名: {file} (允许: app.log / app.log.N / events.jsonl)")
 
     if not log_file.exists():
-        raise HTTPException(status_code=404, detail=f"日志文件不存在: {display_name}")
+        raise HTTPException(status_code=404, detail=f"文件不存在: {file or 'app.log'}")
 
-    # 解析时间范围(支持带 Z 后缀的 UTC ISO 8601)
+    # ---------- 2. 解析时间范围 ----------
     def _parse_iso_utc(s: str | None) -> datetime | None:
         if not s:
             return None
         try:
-            # 允许 "...Z" 或 "+00:00" 或 naive(默认 UTC)
             ss = s.strip()
             if ss.endswith("Z"):
                 ss = ss[:-1] + "+00:00"
@@ -239,7 +252,7 @@ async def download_log(
                 dt = dt.replace(tzinfo=timezone.utc)
             else:
                 dt = dt.astimezone(timezone.utc)
-            return dt.replace(tzinfo=None)  # 后续与 naive UTC 时间戳比较
+            return dt.replace(tzinfo=None)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"时间格式错误 ({s}): {e}")
 
@@ -252,7 +265,27 @@ async def download_log(
     if fmt not in ("text", "csv"):
         raise HTTPException(status_code=400, detail=f"不支持的 format: {fmt} (可选: text / csv)")
 
-    # 解析日志行(首行带时间戳,后续多行为 traceback)
+    # 文件名后缀带范围提示
+    range_tag = ""
+    if since_dt or until_dt:
+        bits = []
+        if since_dt:
+            bits.append("from-" + since_dt.strftime("%Y%m%dT%H%M%SZ"))
+        if until_dt:
+            bits.append("to-" + until_dt.strftime("%Y%m%dT%H%M%SZ"))
+        range_tag = "-" + "_".join(bits)
+    display_name = f"{base_name}-{datetime.utcnow().strftime('%Y%m%d')}{range_tag}.{ext}"
+
+    try:
+        raw_text = log_file.read_text(encoding="utf-8", errors="replace")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取文件失败: {e}")
+
+    # ---------- 3a. events.jsonl 分支 ----------
+    if is_events:
+        return _build_events_response(raw_text, fmt, since_dt, until_dt, display_name)
+
+    # ---------- 3b. app.log 分支(原逻辑) ----------
     line_re = re.compile(
         r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})"
         r" \[(?P<level>\w+)\] (?P<logger>[^:]+): (?P<msg>.*)$"
@@ -263,11 +296,6 @@ async def download_log(
             return datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S,%f")
         except Exception:
             return None
-
-    try:
-        raw_text = log_file.read_text(encoding="utf-8", errors="replace")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取日志失败: {e}")
 
     # 把日志切成 records(一条 = 第一行带 ts + 后续到下一个 ts 为止的多行)
     records: list[tuple[datetime | None, list[tuple[int, str]]]] = []
@@ -297,25 +325,15 @@ async def download_log(
 
     filtered = [(ts, lines) for ts, lines in records if _in_range(ts)]
 
-    # 输出文件名后缀带上过滤提示(可选)
-    range_tag = ""
-    if since_dt or until_dt:
-        bits = []
-        if since_dt:
-            bits.append("from-" + since_dt.strftime("%Y%m%dT%H%M%SZ"))
-        if until_dt:
-            bits.append("to-" + until_dt.strftime("%Y%m%dT%H%M%SZ"))
-        range_tag = "-" + "_".join(bits)
-
     if fmt == "text":
         body = "\n".join(line for _, lines in filtered for _, line in lines)
         if body:
             body += "\n"
-        text_name = display_name.rsplit(".", 1)[0] + range_tag + ".log"
+        # ext 已是 .log, 直接用 display_name
         return Response(
             content=body,
             media_type="text/plain; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{text_name}"'},
+            headers={"Content-Disposition": f'attachment; filename="{display_name}"'},
         )
 
     # CSV
@@ -341,7 +359,94 @@ async def download_log(
             msg = "\n".join(l for _, l in lines)
             writer.writerow([first_idx, "", "RAW", "", msg])
 
-    csv_name = display_name.rsplit(".", 1)[0] + range_tag + ".csv"
+    csv_name = display_name.rsplit(".", 1)[0] + ".csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{csv_name}"'},
+    )
+
+
+def _build_events_response(
+    raw_text: str,
+    fmt: str,
+    since_dt,
+    until_dt,
+    display_name: str,
+):
+    """构建 events.jsonl 的下载响应
+
+    - text: 原样返回 (JSONL)
+    - csv: 把每行 JSON 拍平成表格, 列固定 14 个字段
+    - since/until: 按 events.time 字段过滤
+    """
+    from fastapi.responses import Response
+    from datetime import datetime, timezone
+    import csv
+    import io
+
+    # events.jsonl 的 14 个标准字段 (analytics.py 中 record_event 的字段顺序)
+    EVENT_COLS = [
+        "time", "run_id", "event_type", "page_version",
+        "session_id", "query_id", "user_input",
+        "intent_recognized", "intent_confidence", "slots",
+        "schema_mapped", "sql_generated", "sql_confidence",
+        "sql_retry_count", "sql_executed_status", "sql_elapsed_ms",
+        "row_count", "story_generated", "next_steps_count",
+        "followups_count", "error_code", "error_stage",
+        "error_msg", "extra",
+    ]
+
+    def _parse_event_ts(time_str: str):
+        """解析 events.time (ISO 8601 带时区) -> naive UTC"""
+        try:
+            ss = time_str.strip()
+            if ss.endswith("Z"):
+                ss = ss[:-1] + "+00:00"
+            dt = datetime.fromisoformat(ss)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        except Exception:
+            return None
+
+    # 解析 + 过滤
+    parsed = []
+    for line in raw_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = __import__("json").loads(line)
+        except Exception:
+            continue
+        ts = _parse_event_ts(obj.get("time", ""))
+        if since_dt and (ts is None or ts < since_dt):
+            continue
+        if until_dt and (ts is None or ts > until_dt):
+            continue
+        parsed.append(obj)
+
+    if fmt == "text":
+        json_mod = __import__("json")
+        body = "\n".join(json_mod.dumps(o, ensure_ascii=False, default=str) for o in parsed)
+        if body:
+            body += "\n"
+        return Response(
+            content=body,
+            media_type="application/x-ndjson; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{display_name}"'},
+        )
+
+    # CSV: 固定 24 列表头, 缺失字段填空
+    buf = io.StringIO()
+    buf.write("﻿")
+    writer = csv.writer(buf, quoting=csv.QUOTE_ALL)
+    writer.writerow(EVENT_COLS)
+    for obj in parsed:
+        writer.writerow([obj.get(c, "") for c in EVENT_COLS])
+
+    csv_name = display_name.rsplit(".", 1)[0] + ".csv"
     return Response(
         content=buf.getvalue(),
         media_type="text/csv; charset=utf-8",
@@ -351,18 +456,30 @@ async def download_log(
 
 @app.get("/api/log/list")
 async def list_logs():
-    """列出所有日志文件 (含轮转的)"""
+    """列出所有日志文件 (含轮转的 + 埋点 events.jsonl)"""
     from config import LOG_DIR
     files = []
+    # 应用日志 (含轮转)
     for f in LOG_DIR.glob("app.log*"):
         stat = f.stat()
         files.append({
             "name": f.name,
             "size_bytes": stat.st_size,
             "modified": __import__("datetime").datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "category": "log",
+        })
+    # 埋点 events.jsonl (单独目录)
+    events_file = ANALYTICS_DIR / "events.jsonl"
+    if events_file.exists():
+        stat = events_file.stat()
+        files.append({
+            "name": events_file.name,
+            "size_bytes": stat.st_size,
+            "modified": __import__("datetime").datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "category": "events",
         })
     files.sort(key=lambda x: x["modified"], reverse=True)
-    return {"log_dir": str(LOG_DIR), "files": files}
+    return {"log_dir": str(LOG_DIR), "analytics_dir": str(ANALYTICS_DIR), "files": files}
 
 
 if __name__ == "__main__":

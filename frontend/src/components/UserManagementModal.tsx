@@ -124,8 +124,13 @@ export function UserManagementModal({ onCancel }: Props) {
     }
   };
 
-  // 日志列表(轮转的也能选)
-  const [logFiles, setLogFiles] = useState<{ name: string; size_bytes: number; modified: string }[]>([]);
+  // 日志列表(轮转的也能选, 含 events.jsonl 埋点)
+  const [logFiles, setLogFiles] = useState<{
+    name: string;
+    size_bytes: number;
+    modified: string;
+    category?: 'log' | 'events';
+  }[]>([]);
   const [logLoading, setLogLoading] = useState(false);
 
   const loadLogs = async () => {
@@ -268,7 +273,12 @@ export function UserManagementModal({ onCancel }: Props) {
                 <tbody>
                   {logFiles.map((f) => (
                     <tr key={f.name}>
-                      <td><code>{f.name}</code></td>
+                      <td>
+                        <code>{f.name}</code>
+                        {f.category === 'events' && (
+                          <span className="events-tag" title="埋点事件 (PRD §3.6.2)">📊 埋点</span>
+                        )}
+                      </td>
                       <td>{formatSize(f.size_bytes)}</td>
                       <td className="user-time">{f.modified.replace('T', ' ').slice(0, 16)}</td>
                       <td>

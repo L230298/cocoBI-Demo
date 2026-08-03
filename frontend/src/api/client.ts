@@ -197,9 +197,12 @@ export const api = {
     return res.blob();
   },
 
-  // 列出所有日志文件(含轮转的)
-  listLogs: (): Promise<{ log_dir: string; files: { name: string; size_bytes: number; modified: string }[] }> =>
-    jsonFetch('/log/list'),
+  // 列出所有日志文件 (含轮转的 + 埋点 events.jsonl)
+  listLogs: (): Promise<{
+    log_dir: string;
+    analytics_dir?: string;
+    files: { name: string; size_bytes: number; modified: string; category?: 'log' | 'events' }[];
+  }> => jsonFetch('/log/list'),
 };
 
 // 在生产环境方便调试 —— 暴露 BASE_URL 到 window

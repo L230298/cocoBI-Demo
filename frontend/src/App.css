@@ -1327,3 +1327,16 @@ body {
 .spin {
   animation: spin 1s linear infinite;
 }
+
+/* events.jsonl 埋点文件标签 */
+.events-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%);
+  color: #4338ca;
+  font-size: 10px;
+  border-radius: 4px;
+  font-weight: 500;
+  vertical-align: middle;
+}
