@@ -1160,6 +1160,26 @@ body {
   margin-top: 12px;
 }
 
+/* ==================== 日志格式选择器 ==================== */
+.log-format-select {
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.log-format-select:hover {
+  border-color: #9ca3af;
+}
+.log-format-select:focus {
+  border-color: #5b6cff;
+  box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.15);
+}
+
 /* ==================== 日志文件列表 (含轮转历史) ==================== */
 .log-files-section {
   margin-bottom: 14px;

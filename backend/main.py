@@ -127,20 +127,28 @@ async def health():
 
 
 @app.get("/api/log/download")
-async def download_log(file: str | None = None):
+async def download_log(
+    file: str | None = None,
+    format: str | None = None,
+):
     """下载应用日志 - 支持下载当前日志或轮转历史日志
 
     - 不传 file: 下载 app.log(当前正在写的)
     - 传 file=app.log.1 / app.log.2 ... : 下载对应的轮转备份
+    - format=text (默认): 原始文本
+    - format=csv: 转成 CSV (UTF-8 BOM, Excel 友好) 列: line/timestamp/level/logger/message
     """
-    from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse, Response
     from fastapi import HTTPException
     import re
+    import csv
+    import io
+    from datetime import datetime
     from config import LOG_DIR
 
     if file is None:
         log_file = LOG_DIR / "app.log"
-        display_name = f"cocoBI-app-{__import__('datetime').datetime.utcnow().strftime('%Y%m%d')}.log"
+        display_name = f"cocoBI-app-{datetime.utcnow().strftime('%Y%m%d')}.log"
     else:
         # 安全检查: 只允许 app.log / app.log.N(N 是数字),防路径穿越
         if not re.fullmatch(r"app\.log(\.\d+)?", file):
@@ -151,11 +159,50 @@ async def download_log(file: str | None = None):
     if not log_file.exists():
         raise HTTPException(status_code=404, detail=f"日志文件不存在: {display_name}")
 
-    return FileResponse(
-        path=str(log_file),
-        media_type="text/plain",
-        filename=display_name,
-    )
+    fmt = (format or "text").lower()
+    if fmt == "text":
+        return FileResponse(
+            path=str(log_file),
+            media_type="text/plain",
+            filename=display_name,
+        )
+
+    if fmt == "csv":
+        # 解析每行: 2026-08-03 10:23:45,774 [INFO] logger.name: message...
+        line_re = re.compile(
+            r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})"
+            r" \[(?P<level>\w+)\] (?P<logger>[^:]+): (?P<msg>.*)$"
+        )
+        try:
+            raw_text = log_file.read_text(encoding="utf-8", errors="replace")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"读取日志失败: {e}")
+
+        # UTF-8 BOM 让 Excel 直接识别中文不乱码
+        buf = io.StringIO()
+        buf.write("﻿")
+        writer = csv.writer(buf, quoting=csv.QUOTE_ALL)
+        writer.writerow(["line", "timestamp", "level", "logger", "message"])
+        for idx, line in enumerate(raw_text.splitlines(), start=1):
+            m = line_re.match(line)
+            if m:
+                # 转成 ISO 8601 方便排序/筛选
+                ts_iso = m["ts"].replace(",", ".").replace(" ", "T") + "Z"
+                writer.writerow([idx, ts_iso, m["level"], m["logger"].strip(), m["msg"]])
+            else:
+                # 无法解析的多行 traceback 后续行,放到 message 保留原貌
+                writer.writerow([idx, "", "RAW", "", line])
+
+        csv_name = display_name.rsplit(".", 1)[0] + ".csv"
+        return Response(
+            content=buf.getvalue(),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{csv_name}"',
+            },
+        )
+
+    raise HTTPException(status_code=400, detail=f"不支持的 format: {fmt} (可选: text / csv)")
 
 
 @app.get("/api/log/list")

@@ -179,8 +179,10 @@ export const api = {
 
   // 日志下载 - 直接以 blob 返回,文件名后端在 Content-Disposition 里给了
   // 这里单独处理:不走 jsonFetch,因为需要拿原始 blob
-  downloadLog: async (): Promise<Blob> => {
-    const res = await fetch(`${BASE_URL}/log/download`);
+  // format: 'text' (默认, 原始) 或 'csv' (Excel 友好)
+  downloadLog: async (format: 'text' | 'csv' = 'text'): Promise<Blob> => {
+    const params = format === 'csv' ? '?format=csv' : '';
+    const res = await fetch(`${BASE_URL}/log/download${params}`);
     if (!res.ok) {
       throw new Error(`日志下载失败 (HTTP ${res.status})`);
     }

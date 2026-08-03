@@ -78,14 +78,18 @@ export function UserManagementModal({ onCancel }: Props) {
     }
   };
 
+  // 日志导出格式: text (原始) / csv (Excel 友好)
+  const [logFormat, setLogFormat] = useState<'text' | 'csv'>('text');
+
   const handleDownloadLog = async () => {
     try {
-      const blob = await api.downloadLog();
+      const blob = await api.downloadLog(logFormat);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       const date = new Date().toISOString().slice(0, 10);
-      a.download = `cocoBI-app-${date}.log`;
+      const ext = logFormat === 'csv' ? 'csv' : 'log';
+      a.download = `cocoBI-app-${date}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
@@ -114,8 +118,10 @@ export function UserManagementModal({ onCancel }: Props) {
   }, []);
 
   const handleDownloadLogFile = (filename: string) => {
-    // 直接打开下载链接(浏览器处理)
-    window.open(`${API_BASE_URL}/log/download?file=${encodeURIComponent(filename)}`, '_blank');
+    // 单文件下载遵循当前格式选择
+    const params = new URLSearchParams({ file: filename });
+    if (logFormat === 'csv') params.set('format', 'csv');
+    window.open(`${API_BASE_URL}/log/download?${params.toString()}`, '_blank');
   };
 
   const formatSize = (bytes: number) => {
@@ -141,7 +147,17 @@ export function UserManagementModal({ onCancel }: Props) {
           <div className="user-manage-toolbar">
             <span className="user-manage-count">共 {users.length} 个用户</span>
             <div className="user-manage-actions">
-              <button className="action-btn" onClick={handleDownloadLog} title="下载当前日志 (app.log)">
+              <select
+                className="log-format-select"
+                value={logFormat}
+                onChange={(e) => setLogFormat(e.target.value as 'text' | 'csv')}
+                title="选择日志导出格式"
+                aria-label="日志格式"
+              >
+                <option value="text">📄 原始 (.log)</option>
+                <option value="csv">📊 CSV (.csv, Excel)</option>
+              </select>
+              <button className="action-btn" onClick={handleDownloadLog} title={`下载当前日志 (app.${logFormat === 'csv' ? 'csv' : 'log'})`}>
                 <Download size={14} /> 下载当前日志
               </button>
               <button className="action-btn primary" onClick={openAdd}>
