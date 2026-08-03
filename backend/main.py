@@ -1,5 +1,6 @@
 """cocoBI 后端入口 - FastAPI"""
 from __future__ import annotations
+import json
 import logging
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
@@ -91,6 +92,69 @@ async def global_exception_handler(request: Request, exc: Exception):
             "success": False,
             "error_code": type(exc).__name__,
             "error_msg": "系统开小差了,请稍后再试",  # 友好提示,不暴露技术细节
+        },
+    )
+
+
+# 422 校验错误:在被 Pydantic 拦下之前补一条埋点, 用于观测「空查询/超长查询」等被前端漏掉的情况
+@app.exception_handler(422)
+async def request_validation_exception_handler(request: Request, exc: Exception):
+    """RequestValidationError -> 422: 写一条 query_rejected 埋点, 然后返回标准 422"""
+    try:
+        from services.analytics import record_event
+        from datetime import datetime, timezone
+
+        body_bytes = b""
+        try:
+            body_bytes = await request.body()
+        except Exception:
+            pass
+        user_input = ""
+        session_id = ""
+        dataset_id = ""
+        try:
+            payload = json.loads(body_bytes.decode("utf-8") or "{}")
+            user_input = (payload.get("user_input") or "")[:500]
+            session_id = (payload.get("session_id") or "")[:64]
+            dataset_id = (payload.get("dataset_id") or "")[:64]
+        except Exception:
+            pass
+
+        # 解析具体哪个字段出错(空字符串 -> min_length, 超长 -> max_length)
+        err_list = []
+        try:
+            for e in getattr(exc, "errors", lambda: [])():
+                loc = ".".join(str(x) for x in e.get("loc", []))
+                err_list.append({"loc": loc, "type": e.get("type"), "msg": e.get("msg")})
+        except Exception:
+            pass
+
+        # 用 UTC 时间戳作为 run_id 兜底, 避免重复污染同一 run
+        run_id = f"rejected-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+        try:
+            record_event(
+                event_type="query_rejected",
+                user_input=user_input,
+                session_id=session_id,
+                error_code="ValidationError_422",
+                error_stage="request_validation",
+                error_msg=str(err_list)[:1000],
+                extra={"dataset_id": dataset_id, "validation_errors": err_list, "url_path": str(request.url.path)},
+            )
+        except Exception as e:
+            logger.warning(f"query_rejected 埋点失败: {e}")
+
+        logger.info(f"422 ValidationError on {request.url.path}: {err_list}")
+    except Exception as e:
+        logger.warning(f"422 handler 异常: {e}")
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "success": False,
+            "error_code": "ValidationError_422",
+            "error_msg": "请求参数校验失败",
+            "detail": err_list if 'err_list' in dir() else None,
         },
     )
 

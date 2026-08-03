@@ -43,7 +43,7 @@ for d in [DATA_DIR, SAMPLES_DIR, UPLOAD_DIR, EXPORT_DIR, LOG_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 
-# 意图定义 (PRD §3.1.4)
+# 意图定义 (PRD §3.1.4 核心 5 + 后续扩的 1)
 INTENT_REGISTRY = {
     "QueryBasicMetrics": {
         "name": "基础问数",
@@ -69,6 +69,13 @@ INTENT_REGISTRY = {
     "SmartInterpretation": {
         "name": "智能解读",
         "description": "对数据结果自动生成自然语言解读",
+    },
+    # 后续扩展: 跟 schemas.py IntentName Literal 对齐, 避免「意图越界」BadCase
+    "QueryTrend": {
+        "name": "趋势分析",
+        "description": "查询指标随时间的变化趋势(每日/每周/月度)",
+        "default_time_range": "最近30天",
+        "required_slots": ["指标", "时间范围"],
     },
 }
 

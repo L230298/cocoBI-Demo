@@ -4,6 +4,7 @@
 from __future__ import annotations
 import asyncio
 import re
+import time
 from typing import AsyncGenerator
 from .skills.intent_agent import IntentAgent
 from .skills.schema_agent import SchemaAgent
@@ -11,6 +12,7 @@ from .skills.nl2sql_agent import NL2SQLAgent
 from .skills.storytelling_agent import StorytellingAgent
 from tools import invoke_tool
 from services.session_service import record_query, update_query_sql, update_query_charts
+from services import analytics
 
 
 # Chitchat 关键词模式: 命中就直接返回功能介绍, 不走数据流
@@ -77,7 +79,6 @@ _CHITCHAT_RESPONSES = {
 
 def _detect_chitchat(user_input: str) -> dict | None:
     """检测是否是闲聊/非数据问题, 命中返回 Chitchat 响应
-
     返回: dict {title, summary} 或 None
     """
     text = (user_input or "").strip()
@@ -116,6 +117,14 @@ class Orchestrator:
             "conversation_history": history,
         }
 
+        # ============ 埋点: query_submitted ============
+        analytics.record_event(
+            event_type="query_submitted",
+            user_input=user_input,
+            session_id=session_id,
+            extra={"dataset_id": dataset_id, "user_id": user_id},
+        )
+
         # ============ 阶段 1: IntentAgent ============
         yield {"event": "state_change", "state": "requesting", "message": "正在理解您的问题..."}
         await asyncio.sleep(0.1)
@@ -123,6 +132,15 @@ class Orchestrator:
         # Chitchat 快速通道: 命中关键词就直接返回功能介绍, 不走 LLM 也不走数据流
         chitchat_resp = _detect_chitchat(user_input)
         if chitchat_resp:
+            # 埋点: chitchat 也记一条 intent_recognized (intent=Chitchat)
+            analytics.record_event(
+                event_type="intent_recognized",
+                user_input=user_input,
+                session_id=session_id,
+                intent_recognized="Chitchat",
+                intent_confidence=1.0,
+                slots={"type": chitchat_resp["type"]},
+            )
             yield {"event": "intent", "data": {"intent": "Chitchat", "confidence": 1.0, "slots": {}, "alternatives": []}}
             yield {"event": "chitchat", "data": chitchat_resp}
             yield {"event": "state_change", "state": "completed", "message": "回复完成"}
@@ -140,10 +158,32 @@ class Orchestrator:
         )
         full_result["query_id"] = query_id
 
+        # ============ 埋点: intent_recognized ============
+        analytics.record_event(
+            event_type="intent_recognized",
+            user_input=user_input,
+            session_id=session_id,
+            query_id=query_id,
+            intent_recognized=intent_result["intent"],
+            intent_confidence=intent_result.get("confidence", 0),
+            slots=intent_result.get("slots", {}),
+            extra={"alternatives": intent_result.get("alternatives", [])},
+        )
+
         yield {"event": "intent", "data": intent_result, "query_id": query_id}
 
         # 兜底 - PRD §3.1.5
         if intent_result.get("fallback_message"):
+            analytics.record_event(
+                event_type="error_occurred",
+                user_input=user_input,
+                session_id=session_id,
+                query_id=query_id,
+                intent_recognized=intent_result["intent"],
+                error_code="INTENT_FALLBACK",
+                error_stage="intent",
+                error_msg=intent_result["fallback_message"],
+            )
             yield {
                 "event": "fallback",
                 "state": "abnormal",
@@ -154,7 +194,6 @@ class Orchestrator:
 
         # ============ 阶段 2: SchemaAgent ============
         yield {"event": "state_change", "state": "receiving", "message": "正在映射数据表..."}
-        # 把 user_input 传给 schema agent(用于数据清洗默认判断)
         slots_with_input = dict(intent_result.get("slots", {}))
         slots_with_input["_user_input"] = user_input
         schema_result = await self.schema_agent.run(
@@ -163,9 +202,32 @@ class Orchestrator:
             dataset_id=dataset_id,
         )
         full_result["schema"] = schema_result
+
+        # ============ 埋点: schema_mapped (扩展埋点,PRD 列表之外) ============
+        analytics.record_event(
+            event_type="schema_mapped",
+            user_input=user_input,
+            session_id=session_id,
+            query_id=query_id,
+            intent_recognized=intent_result["intent"],
+            schema_mapped=schema_result,
+            extra={"confidence": schema_result.get("confidence")},
+        )
+
         yield {"event": "schema", "data": schema_result}
 
         if schema_result.get("confidence", 0) < 0.5:
+            analytics.record_event(
+                event_type="error_occurred",
+                user_input=user_input,
+                session_id=session_id,
+                query_id=query_id,
+                intent_recognized=intent_result["intent"],
+                error_code="SCHEMA_LOW_CONFIDENCE",
+                error_stage="schema",
+                error_msg="未找到匹配的数据字段,请检查数据集",
+                extra={"confidence": schema_result.get("confidence")},
+            )
             yield {
                 "event": "fallback",
                 "state": "abnormal",
@@ -184,13 +246,37 @@ class Orchestrator:
             user_input=user_input,
         )
         full_result["sql"] = sql_result
+
+        # ============ 埋点: sql_generated ============
+        analytics.record_event(
+            event_type="sql_generated",
+            user_input=user_input,
+            session_id=session_id,
+            query_id=query_id,
+            intent_recognized=intent_result["intent"],
+            sql_generated=sql_result.get("sql", ""),
+            sql_confidence=sql_result.get("confidence"),
+            sql_retry_count=sql_result.get("retry_count", 0),
+            extra={"is_executable": sql_result.get("is_executable")},
+        )
+
         yield {"event": "sql", "data": sql_result}
-        # 回填 SQL 到 history(报告功能靠 sql 重跑)
         if sql_result.get("sql") and query_id:
             update_query_sql(user_id, query_id, sql_result["sql"])
 
-        # 兜底
         if not sql_result.get("is_executable"):
+            analytics.record_event(
+                event_type="error_occurred",
+                user_input=user_input,
+                session_id=session_id,
+                query_id=query_id,
+                intent_recognized=intent_result["intent"],
+                sql_generated=sql_result.get("sql", ""),
+                error_code="SQL_NOT_EXECUTABLE",
+                error_stage="nl2sql",
+                error_msg=sql_result.get("fallback_message", "SQL 生成失败"),
+                extra={"validation_errors": sql_result.get("validation_errors", [])},
+            )
             yield {
                 "event": "fallback",
                 "state": "abnormal",
@@ -199,11 +285,44 @@ class Orchestrator:
             }
             return
 
-        # 执行 SQL
-        exec_result = await invoke_tool(
-            "execute_sql", sql=sql_result["sql"], dataset_id=dataset_id
-        )
+        # 执行 SQL - 埋点 sql_executed
+        sql_start = time.time()
+        try:
+            exec_result = await invoke_tool(
+                "execute_sql", sql=sql_result["sql"], dataset_id=dataset_id
+            )
+        except Exception as e:
+            sql_elapsed_ms = int((time.time() - sql_start) * 1000)
+            analytics.record_event(
+                event_type="error_occurred",
+                user_input=user_input,
+                session_id=session_id,
+                query_id=query_id,
+                intent_recognized=intent_result["intent"],
+                sql_generated=sql_result.get("sql", ""),
+                sql_elapsed_ms=sql_elapsed_ms,
+                error_code=type(e).__name__,
+                error_stage="execute_sql",
+                error_msg=str(e),
+            )
+            raise
+        sql_elapsed_ms = int((time.time() - sql_start) * 1000)
         full_result["sql_result"] = exec_result
+
+        # ============ 埋点: sql_executed ============
+        analytics.record_event(
+            event_type="sql_executed",
+            user_input=user_input,
+            session_id=session_id,
+            query_id=query_id,
+            intent_recognized=intent_result["intent"],
+            sql_generated=sql_result.get("sql", ""),
+            sql_executed_status="success" if exec_result.get("success") else "fail",
+            sql_elapsed_ms=sql_elapsed_ms,
+            row_count=exec_result.get("row_count"),
+            extra={"error_msg": exec_result.get("error_msg")} if not exec_result.get("success") else None,
+        )
+
         yield {"event": "sql_result", "data": exec_result}
 
         # ============ 阶段 4: StorytellingAgent ============
@@ -211,6 +330,27 @@ class Orchestrator:
         story = await self.storytelling_agent.run(
             full_result=full_result,
             user_context={"session_id": session_id, "user_id": user_id},
+        )
+
+        # ============ 埋点: story_generated ============
+        next_steps_count = len(story.get("next_steps", []) or [])
+        followups_count = len(story.get("recommended_followups", []) or [])
+        analytics.record_event(
+            event_type="story_generated",
+            user_input=user_input,
+            session_id=session_id,
+            query_id=query_id,
+            intent_recognized=intent_result["intent"],
+            sql_generated=sql_result.get("sql", ""),
+            story_generated={
+                "title": story.get("title"),
+                "summary": story.get("summary"),
+                "sections_count": len(story.get("sections", []) or []),
+                "observations_count": len(story.get("observations", []) or []),
+                "has_charts": bool(story.get("charts")),
+            },
+            next_steps_count=next_steps_count,
+            followups_count=followups_count,
         )
 
         # 流式推送报告各部分 - PRD §3.4.6 "生成中" 状态
@@ -227,6 +367,5 @@ class Orchestrator:
         yield {"event": "state_change", "state": "completed", "message": "分析完成"}
         yield {"event": "complete", "data": story}
 
-        # 把 charts 回填到 session, 报告功能要用
         if query_id and story.get("charts"):
             update_query_charts(user_id, query_id, story.get("charts") or [])
