@@ -691,18 +691,68 @@ body {
   background: #ede9fe;
   border-color: #c4b5fd;
 }
+.history-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
 .history-query {
   color: #4b5563;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
+  display: block;
+}
+.history-dataset-tag {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 0 6px;
+  background: #f3f4f6;
+  border-radius: 3px;
+  font-size: 10px;
+  color: #6b7280;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .history-time {
   color: #9ca3af;
   font-size: 10px;
   flex-shrink: 0;
+}
+.history-item {
+  position: relative;
+}
+.history-delete-btn {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.history-item:hover .history-delete-btn {
+  opacity: 1;
+}
+.history-delete-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
 }
 
 /* ============= Modals ============= */

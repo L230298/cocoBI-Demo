@@ -1,10 +1,31 @@
 // 核心 hook - 编排整个对话流程
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { api } from '../api/client';
 import type { AppState, DataStory, DatasetInfo, IntentResult } from '../types';
 import type { HistoryItem } from '../components/HistoryPanel';
 
 const SESSION_ID = `session-${Date.now()}`;
+const HISTORY_KEY = 'cocobi-history';
+const HISTORY_MAX = 50;
+
+function loadHistory(): HistoryItem[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter((x) => x && x.id && x.query && x.created_at) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(items: HistoryItem[]) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, HISTORY_MAX)));
+  } catch (e) {
+    console.warn('保存历史失败:', e);
+  }
+}
 
 export interface AnalysisState {
   appState: AppState;
@@ -33,8 +54,13 @@ export function useAnalysis() {
   const [state, setState] = useState<AnalysisState>(INITIAL);
   const [datasets, setDatasets] = useState<DatasetInfo[]>([]);
   const [activeDataset, setActiveDataset] = useState<DatasetInfo | null>(null);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>(() => loadHistory());
   const abortRef = useRef<AbortController | null>(null);
+
+  // 任何 history 改动都同步到 localStorage (简单可靠, 不需要 useEffect 异步)
+  useEffect(() => {
+    saveHistory(history);
+  }, [history]);
 
   const refreshDatasets = useCallback(async () => {
     try {
@@ -94,9 +120,10 @@ export function useAnalysis() {
         id: `h-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         query: userInput,
         dataset_id: activeDataset.dataset_id,
+        dataset_name: activeDataset.name,
         created_at: new Date().toISOString(),
       };
-      setHistory((prev) => [newItem, ...prev].slice(0, 50));
+      setHistory((prev) => [newItem, ...prev].slice(0, HISTORY_MAX));
 
       // 重置 + 进入请求中
       setState({
@@ -204,6 +231,10 @@ export function useAnalysis() {
     setHistory([]);
   }, []);
 
+  const removeHistoryItem = useCallback((id: string) => {
+    setHistory((prev) => prev.filter((h) => h.id !== id));
+  }, []);
+
   const editSql = useCallback(
     async (newSql: string) => {
       if (!activeDataset) return { ok: false, error: '请先选择数据集' };
@@ -277,6 +308,7 @@ export function useAnalysis() {
     reset,
     history,
     clearHistory,
+    removeHistoryItem,
     editSql,
     generateReport,
     downloadReport,

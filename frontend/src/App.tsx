@@ -31,6 +31,7 @@ function App() {
     reset,
     history,
     clearHistory,
+    removeHistoryItem,
     editSql,
     generateReport,
     downloadReport,
@@ -174,6 +175,7 @@ function App() {
             activeDataset={activeDataset}
             onSelect={(q) => submitQuery(q)}
             onClear={clearHistory}
+            onDelete={removeHistoryItem}
           />
         </aside>
 
