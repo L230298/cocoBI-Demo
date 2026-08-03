@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -97,12 +98,11 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # 422 校验错误:在被 Pydantic 拦下之前补一条埋点, 用于观测「空查询/超长查询」等被前端漏掉的情况
-@app.exception_handler(422)
-async def request_validation_exception_handler(request: Request, exc: Exception):
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(request: Request, exc: RequestValidationError):
     """RequestValidationError -> 422: 写一条 query_rejected 埋点, 然后返回标准 422"""
     try:
         from services.analytics import record_event
-        from datetime import datetime, timezone
 
         body_bytes = b""
         try:
@@ -123,14 +123,12 @@ async def request_validation_exception_handler(request: Request, exc: Exception)
         # 解析具体哪个字段出错(空字符串 -> min_length, 超长 -> max_length)
         err_list = []
         try:
-            for e in getattr(exc, "errors", lambda: [])():
+            for e in exc.errors():
                 loc = ".".join(str(x) for x in e.get("loc", []))
                 err_list.append({"loc": loc, "type": e.get("type"), "msg": e.get("msg")})
         except Exception:
             pass
 
-        # 用 UTC 时间戳作为 run_id 兜底, 避免重复污染同一 run
-        run_id = f"rejected-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
         try:
             record_event(
                 event_type="query_rejected",
@@ -154,7 +152,7 @@ async def request_validation_exception_handler(request: Request, exc: Exception)
             "success": False,
             "error_code": "ValidationError_422",
             "error_msg": "请求参数校验失败",
-            "detail": err_list if 'err_list' in dir() else None,
+            "detail": err_list,
         },
     )
 
