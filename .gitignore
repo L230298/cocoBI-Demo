@@ -19,10 +19,14 @@ node_modules/
 backend/data/uploads/*
 backend/data/exports/*
 backend/data/feedback/*
+backend/data/analytics/events.jsonl
+backend/data/dbs/*
+backend/data/users.db
 !backend/data/uploads/.gitkeep
 !backend/data/exports/.gitkeep
 !backend/data/feedback/.gitkeep
 !backend/data/samples/
+!backend/data/analytics/.gitkeep
 
 # 系统
 .DS_Store
