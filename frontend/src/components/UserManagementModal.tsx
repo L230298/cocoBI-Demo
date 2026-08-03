@@ -1,7 +1,31 @@
 // 用户管理弹窗 - 增删改查 + 角色 (admin/user) + 日志下载
 import { useEffect, useState } from 'react';
-import { X, Plus, Edit2, Trash2, User as UserIcon, Download, FileText, RefreshCw } from 'lucide-react';
+import { X, Plus, Edit2, Trash2, User as UserIcon, Download, FileText, RefreshCw, Calendar } from 'lucide-react';
 import { api, API_BASE_URL } from '../api/client';
+
+// 时间范围预设: 键 = 后端 since/until 计算用的 UTC ISO 字符串
+type RangePreset = 'all' | '1h' | '24h' | '7d' | 'custom';
+
+function computeRange(preset: RangePreset, custom: { since: string; until: string }): { since?: string; until?: string } {
+  if (preset === 'all') return {};
+  if (preset === 'custom') {
+    // datetime-local 输入框不带时区, 当作本地时间, 转 UTC ISO 字符串
+    const toIso = (v: string) => {
+      if (!v) return undefined;
+      // new Date('2026-08-03T12:00') 按本地时区解析
+      const d = new Date(v);
+      if (isNaN(d.getTime())) return undefined;
+      return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+    };
+    return { since: toIso(custom.since), until: toIso(custom.until) };
+  }
+  const now = new Date();
+  const sinceDate = new Date(now);
+  if (preset === '1h') sinceDate.setHours(now.getHours() - 1);
+  else if (preset === '24h') sinceDate.setHours(now.getHours() - 24);
+  else if (preset === '7d') sinceDate.setDate(now.getDate() - 7);
+  return { since: sinceDate.toISOString().replace(/\.\d{3}Z$/, 'Z') };
+}
 
 interface User {
   id: string;
@@ -80,16 +104,19 @@ export function UserManagementModal({ onCancel }: Props) {
 
   // 日志导出格式: text (原始) / csv (Excel 友好)
   const [logFormat, setLogFormat] = useState<'text' | 'csv'>('text');
+  // 日志时间范围
+  const [logRange, setLogRange] = useState<RangePreset>('all');
+  const [logCustomRange, setLogCustomRange] = useState<{ since: string; until: string }>({ since: '', until: '' });
 
   const handleDownloadLog = async () => {
     try {
-      const blob = await api.downloadLog(logFormat);
+      const range = logRange === 'all' ? null : computeRange(logRange, logCustomRange);
+      const blob = await api.downloadLog(logFormat, range);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const date = new Date().toISOString().slice(0, 10);
       const ext = logFormat === 'csv' ? 'csv' : 'log';
-      a.download = `cocoBI-app-${date}.${ext}`;
+      a.download = `cocoBI-app-${new Date().toISOString().slice(0, 10)}${logRange !== 'all' ? '-' + logRange : ''}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
@@ -118,9 +145,14 @@ export function UserManagementModal({ onCancel }: Props) {
   }, []);
 
   const handleDownloadLogFile = (filename: string) => {
-    // 单文件下载遵循当前格式选择
+    // 单文件下载遵循当前格式 + 时间范围
     const params = new URLSearchParams({ file: filename });
     if (logFormat === 'csv') params.set('format', 'csv');
+    if (logRange !== 'all') {
+      const range = computeRange(logRange, logCustomRange);
+      if (range.since) params.set('since', range.since);
+      if (range.until) params.set('until', range.until);
+    }
     window.open(`${API_BASE_URL}/log/download?${params.toString()}`, '_blank');
   };
 
@@ -147,23 +179,64 @@ export function UserManagementModal({ onCancel }: Props) {
           <div className="user-manage-toolbar">
             <span className="user-manage-count">共 {users.length} 个用户</span>
             <div className="user-manage-actions">
-              <select
-                className="log-format-select"
-                value={logFormat}
-                onChange={(e) => setLogFormat(e.target.value as 'text' | 'csv')}
-                title="选择日志导出格式"
-                aria-label="日志格式"
-              >
-                <option value="text">📄 原始 (.log)</option>
-                <option value="csv">📊 CSV (.csv, Excel)</option>
-              </select>
-              <button className="action-btn" onClick={handleDownloadLog} title={`下载当前日志 (app.${logFormat === 'csv' ? 'csv' : 'log'})`}>
-                <Download size={14} /> 下载当前日志
-              </button>
               <button className="action-btn primary" onClick={openAdd}>
                 <Plus size={14} /> 新增用户
               </button>
             </div>
+          </div>
+
+          {/* 日志导出控制条 (格式 + 时间范围) */}
+          <div className="log-export-bar">
+            <Calendar size={13} style={{ color: '#6b7280' }} />
+            <select
+              className="log-format-select"
+              value={logRange}
+              onChange={(e) => setLogRange(e.target.value as RangePreset)}
+              title="日志时间范围"
+              aria-label="日志时间范围"
+            >
+              <option value="all">全部</option>
+              <option value="1h">最近 1 小时</option>
+              <option value="24h">最近 24 小时</option>
+              <option value="7d">最近 7 天</option>
+              <option value="custom">自定义...</option>
+            </select>
+            {logRange === 'custom' && (
+              <>
+                <input
+                  type="datetime-local"
+                  className="log-range-input"
+                  value={logCustomRange.since}
+                  onChange={(e) => setLogCustomRange({ ...logCustomRange, since: e.target.value })}
+                  title="起始时间(本地时区)"
+                />
+                <span className="log-range-sep">→</span>
+                <input
+                  type="datetime-local"
+                  className="log-range-input"
+                  value={logCustomRange.until}
+                  onChange={(e) => setLogCustomRange({ ...logCustomRange, until: e.target.value })}
+                  title="结束时间(本地时区)"
+                />
+              </>
+            )}
+            <select
+              className="log-format-select"
+              value={logFormat}
+              onChange={(e) => setLogFormat(e.target.value as 'text' | 'csv')}
+              title="选择日志导出格式"
+              aria-label="日志格式"
+            >
+              <option value="text">📄 原始</option>
+              <option value="csv">📊 CSV (Excel)</option>
+            </select>
+            <button
+              className="action-btn"
+              onClick={handleDownloadLog}
+              title={`下载当前日志 (app.${logFormat === 'csv' ? 'csv' : 'log'})`}
+            >
+              <Download size={14} /> 下载
+            </button>
           </div>
 
           {/* 日志文件列表 (含轮转历史) */}

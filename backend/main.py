@@ -130,6 +130,8 @@ async def health():
 async def download_log(
     file: str | None = None,
     format: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
 ):
     """下载应用日志 - 支持下载当前日志或轮转历史日志
 
@@ -137,13 +139,15 @@ async def download_log(
     - 传 file=app.log.1 / app.log.2 ... : 下载对应的轮转备份
     - format=text (默认): 原始文本
     - format=csv: 转成 CSV (UTF-8 BOM, Excel 友好) 列: line/timestamp/level/logger/message
+    - since/until: 时间范围过滤 (ISO 8601, UTC), 例如 since=2026-08-03T00:00:00Z
+      多行 traceback 跟首行同一记录, 整段保留或整段丢弃
     """
     from fastapi.responses import FileResponse, Response
     from fastapi import HTTPException
     import re
     import csv
     import io
-    from datetime import datetime
+    from datetime import datetime, timezone
     from config import LOG_DIR
 
     if file is None:
@@ -159,50 +163,128 @@ async def download_log(
     if not log_file.exists():
         raise HTTPException(status_code=404, detail=f"日志文件不存在: {display_name}")
 
-    fmt = (format or "text").lower()
-    if fmt == "text":
-        return FileResponse(
-            path=str(log_file),
-            media_type="text/plain",
-            filename=display_name,
-        )
-
-    if fmt == "csv":
-        # 解析每行: 2026-08-03 10:23:45,774 [INFO] logger.name: message...
-        line_re = re.compile(
-            r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})"
-            r" \[(?P<level>\w+)\] (?P<logger>[^:]+): (?P<msg>.*)$"
-        )
+    # 解析时间范围(支持带 Z 后缀的 UTC ISO 8601)
+    def _parse_iso_utc(s: str | None) -> datetime | None:
+        if not s:
+            return None
         try:
-            raw_text = log_file.read_text(encoding="utf-8", errors="replace")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"读取日志失败: {e}")
-
-        # UTF-8 BOM 让 Excel 直接识别中文不乱码
-        buf = io.StringIO()
-        buf.write("﻿")
-        writer = csv.writer(buf, quoting=csv.QUOTE_ALL)
-        writer.writerow(["line", "timestamp", "level", "logger", "message"])
-        for idx, line in enumerate(raw_text.splitlines(), start=1):
-            m = line_re.match(line)
-            if m:
-                # 转成 ISO 8601 方便排序/筛选
-                ts_iso = m["ts"].replace(",", ".").replace(" ", "T") + "Z"
-                writer.writerow([idx, ts_iso, m["level"], m["logger"].strip(), m["msg"]])
+            # 允许 "...Z" 或 "+00:00" 或 naive(默认 UTC)
+            ss = s.strip()
+            if ss.endswith("Z"):
+                ss = ss[:-1] + "+00:00"
+            dt = datetime.fromisoformat(ss)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
             else:
-                # 无法解析的多行 traceback 后续行,放到 message 保留原貌
-                writer.writerow([idx, "", "RAW", "", line])
+                dt = dt.astimezone(timezone.utc)
+            return dt.replace(tzinfo=None)  # 后续与 naive UTC 时间戳比较
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"时间格式错误 ({s}): {e}")
 
-        csv_name = display_name.rsplit(".", 1)[0] + ".csv"
+    since_dt = _parse_iso_utc(since)
+    until_dt = _parse_iso_utc(until)
+    if since_dt and until_dt and since_dt > until_dt:
+        raise HTTPException(status_code=400, detail="since 必须早于 until")
+
+    fmt = (format or "text").lower()
+    if fmt not in ("text", "csv"):
+        raise HTTPException(status_code=400, detail=f"不支持的 format: {fmt} (可选: text / csv)")
+
+    # 解析日志行(首行带时间戳,后续多行为 traceback)
+    line_re = re.compile(
+        r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})"
+        r" \[(?P<level>\w+)\] (?P<logger>[^:]+): (?P<msg>.*)$"
+    )
+
+    def _parse_ts(ts_str: str) -> datetime | None:
+        try:
+            return datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S,%f")
+        except Exception:
+            return None
+
+    try:
+        raw_text = log_file.read_text(encoding="utf-8", errors="replace")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取日志失败: {e}")
+
+    # 把日志切成 records(一条 = 第一行带 ts + 后续到下一个 ts 为止的多行)
+    records: list[tuple[datetime | None, list[tuple[int, str]]]] = []
+    current_ts: datetime | None = None
+    current_lines: list[tuple[int, str]] = []
+    for idx, line in enumerate(raw_text.splitlines(), start=1):
+        m = line_re.match(line)
+        if m:
+            if current_lines:
+                records.append((current_ts, current_lines))
+            current_ts = _parse_ts(m["ts"])
+            current_lines = [(idx, line)]
+        else:
+            current_lines.append((idx, line))
+    if current_lines:
+        records.append((current_ts, current_lines))
+
+    # 按时间戳过滤: 无法解析时间戳的行(空记录开头之前的)始终保留;其他按范围
+    def _in_range(ts: datetime | None) -> bool:
+        if ts is None:
+            return True  # 兜底保留
+        if since_dt and ts < since_dt:
+            return False
+        if until_dt and ts > until_dt:
+            return False
+        return True
+
+    filtered = [(ts, lines) for ts, lines in records if _in_range(ts)]
+
+    # 输出文件名后缀带上过滤提示(可选)
+    range_tag = ""
+    if since_dt or until_dt:
+        bits = []
+        if since_dt:
+            bits.append("from-" + since_dt.strftime("%Y%m%dT%H%M%SZ"))
+        if until_dt:
+            bits.append("to-" + until_dt.strftime("%Y%m%dT%H%M%SZ"))
+        range_tag = "-" + "_".join(bits)
+
+    if fmt == "text":
+        body = "\n".join(line for _, lines in filtered for _, line in lines)
+        if body:
+            body += "\n"
+        text_name = display_name.rsplit(".", 1)[0] + range_tag + ".log"
         return Response(
-            content=buf.getvalue(),
-            media_type="text/csv; charset=utf-8",
-            headers={
-                "Content-Disposition": f'attachment; filename="{csv_name}"',
-            },
+            content=body,
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{text_name}"'},
         )
 
-    raise HTTPException(status_code=400, detail=f"不支持的 format: {fmt} (可选: text / csv)")
+    # CSV
+    buf = io.StringIO()
+    buf.write("﻿")  # UTF-8 BOM, Excel 友好
+    writer = csv.writer(buf, quoting=csv.QUOTE_ALL)
+    writer.writerow(["line", "timestamp", "level", "logger", "message"])
+    for ts, lines in filtered:
+        first_idx, first_line = lines[0]
+        m = line_re.match(first_line)
+        if m and ts is not None:
+            ts_iso = m["ts"].replace(",", ".").replace(" ", "T") + "Z"
+            level = m["level"]
+            logger = m["logger"].strip()
+            # 多行 traceback 的后续行拼到 message,行号保留首行
+            if len(lines) > 1:
+                msg = m["msg"] + "\n" + "\n".join(l for _, l in lines[1:])
+            else:
+                msg = m["msg"]
+            writer.writerow([first_idx, ts_iso, level, logger, msg])
+        else:
+            # 整段无法解析(几乎不会出现)
+            msg = "\n".join(l for _, l in lines)
+            writer.writerow([first_idx, "", "RAW", "", msg])
+
+    csv_name = display_name.rsplit(".", 1)[0] + range_tag + ".csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{csv_name}"'},
+    )
 
 
 @app.get("/api/log/list")
