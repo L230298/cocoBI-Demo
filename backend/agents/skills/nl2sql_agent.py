@@ -67,6 +67,7 @@ class NL2SQLAgent(BaseAgent):
         生成 SQL - 失败时重试 3 次 → 降级为兜底 - PRD §3.1.5
         """
         last_error = None
+        last_fallback_message = None  # Bug #2: 保留内层 fallback_message (数据集缺字段等场景)
         for attempt in range(3):
             result = await super().run(
                 {
@@ -78,10 +79,15 @@ class NL2SQLAgent(BaseAgent):
                 }
             )
 
+            # Bug #2: 内层已有友好 fallback_message (例如数据集缺 amount 字段),直接返回
+            if result.get("fallback_message") and not result.get("is_executable", True):
+                return result
+
             # 校验
             sql = result.get("sql", "")
             if not sql:
                 last_error = "未生成 SQL"
+                last_fallback_message = result.get("fallback_message")
                 continue
 
             # 快速执行校验
@@ -94,8 +100,11 @@ class NL2SQLAgent(BaseAgent):
                 return result
 
             last_error = exec_result.get("error_msg", "未知错误")
+            last_fallback_message = result.get("fallback_message")
 
         # 三次失败 → 兜底
+        # Bug #2: 如果内层有友好提示(如缺字段),优先使用;否则用通用兜底
+        final_fallback = last_fallback_message or FALLBACK_PROMPTS["sql_failed"]
         return {
             "sql": "",
             "params": {},
@@ -103,7 +112,7 @@ class NL2SQLAgent(BaseAgent):
             "confidence": 0.0,
             "is_executable": False,
             "validation_errors": [last_error] if last_error else [],
-            "fallback_message": FALLBACK_PROMPTS["sql_failed"],
+            "fallback_message": final_fallback,
         }
 
 
