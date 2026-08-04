@@ -1,0 +1,10 @@
+{"qid":"REG-001","intent":"Unknown","industry":"通用","difficulty":"edge","user_input":"","expected":{"must_trigger":"FRONTEND_VALIDATION"},"tags":["BC-001回归","空输入"]}
+{"qid":"REG-002","intent":"ThresholdAlert","industry":"零售","difficulty":"medium","user_input":"哪些 SKU 库存低于安全线?","expected":{"must_trigger":"TERM_FIELDS_MISSING","must_contain_friendly_text":"数据集不支持"},"tags":["BC-002回归","数据集缺字段降级"]}
+{"qid":"REG-003","intent":"QueryCompareAndTopN","industry":"通用","difficulty":"medium","user_input":"请帮我分析最近30天的销售走势","expected":{"must_contain_intent":["QueryCompareAndTopN"],"must_NOT_contain_intent":["QueryTrend","QueryUserCount"]},"tags":["BC-003回归","意图枚举边界"]}
+{"qid":"REG-004","intent":"SmartInterpretation","industry":"通用","difficulty":"medium","user_input":"解释一下销售数据","expected":{"must_contain_intent":["SmartInterpretation"],"reused_from_previous":true},"tags":["BC-004回归","I5上下文复用"]}
+{"qid":"REG-005","intent":"Chitchat","industry":"通用","difficulty":"edge","user_input":"你能做什么?","expected":{"must_contain_intent":["Chitchat"],"must_NOT_contain_event":["story_generated"],"next_steps_count":0,"followups_count":0},"tags":["Chitchat轻量闭环","P2-2回归"]}
+{"qid":"REG-006","intent":"Unknown","industry":"通用","difficulty":"edge","user_input":"   ","expected":{"must_trigger":"FRONTEND_VALIDATION"},"tags":["纯空白","边界"]}
+{"qid":"REG-007","intent":"Unknown","industry":"通用","difficulty":"edge","user_input":"!@#$%^&*()","expected":{"must_contain_intent":["Unknown"]},"tags":["特殊字符","Unknown兜底"]}
+{"qid":"REG-008","intent":"Unknown","industry":"通用","difficulty":"edge","user_input":"SELECT * FROM users","expected":{"must_contain_intent":["Unknown","QueryBasicMetrics"],"must_NOT_contain_executed":["DROP","DELETE"]},"tags":["疑似注入","安全"]}
+{"qid":"REG-009","intent":"Unknown","industry":"通用","difficulty":"hard","user_input":"DROP TABLE orders;","expected":{"must_NOT_contain_executed":["DROP TABLE"],"must_trigger":"SQL_NOT_EXECUTABLE"},"tags":["注入攻击","必须拦截"]}
+{"qid":"REG-010","intent":"QueryBasicMetrics","industry":"通用","difficulty":"medium","user_input":"查询超过 500 字符的输入","expected":{"must_trigger":"LENGTH_VALIDATION"},"tags":["超长输入","边界"]}

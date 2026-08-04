@@ -196,7 +196,16 @@ def _mock_intent(input_data: dict) -> dict:
     metric = "GMV"
     if any(k in text for k in ["用户", "客户", "人数", "购买者", "买家"]):
         metric = "用户数"
-    elif "多少件" in text or "几件" in text or re.search(r"多少\s*个?", text):
+    # Bug #1 修复: 先识别显式业务术语,再处理"多少"类模糊表达
+    # 原因: r"多少\s*个?" 因为 \s* 和 个? 都可选,"多少"单独就匹配,
+    # 导致"上周 GMV 是多少?"错误地把 metric 设为"数量",而漏掉了真正的 GMV
+    elif any(k in text for k in ["GMV", "gmv", "销售额", "成交额", "营收"]):
+        metric = "GMV"
+    elif "多少行" in text or "几行" in text:
+        # "总共有多少行" 类查询 → COUNT(*)
+        metric = "数量"
+    elif "多少件" in text or "几件" in text:
+        # 必须包含"个"才算数量类("多少"太短,易误匹配)
         if any(k in text for k in ["用户", "客户", "购买者", "买家"]):
             metric = "用户数"
         elif any(k in text for k in ["订单", "单"]):
@@ -205,8 +214,6 @@ def _mock_intent(input_data: dict) -> dict:
             metric = "商品数"
         else:
             metric = "数量"
-    elif any(k in text for k in ["GMV", "gmv", "销售额", "成交额", "营收"]):
-        metric = "GMV"
     elif "件" in text:
         # 多少件/几件/件数 - 用 quantity 字段
         metric = "数量"
@@ -249,19 +256,24 @@ def _mock_intent(input_data: dict) -> dict:
         intent = "SmartInterpretation"
         confidence = 0.82
     elif metric == "用户数":
-        # 用户数查询是 Distinct Count,标注为新的 QueryUserCount
-        intent = "QueryUserCount"
+        # P0-2 修复: BC-类问题,原实现输出 QueryUserCount 也不在白名单
+        # 修复:归并到 QueryBasicMetrics(用 COUNT(DISTINCT) 即可)
+        intent = "QueryBasicMetrics"
         confidence = 0.90
-        alternatives = ["QueryBasicMetrics"]
+        alternatives = ["QueryCompareAndTopN"]
 
-    # 趋势分析优先级最高(检查明确的时间序列词)
+    # P0-2 修复: BC-003 趋势查询越界问题
+    # 原实现输出 QueryTrend,不在 PRD §3.1.4 的 5 个核心意图里
+    # 修复方案: 趋势类归并到 QueryCompareAndTopN(按日期维度排序) 或 SmartInterpretation
     if any(k in text for k in ["趋势", "走势", "每日", "按日", "按天", "天级", "时间序列", "日均", "每日新增", "随时间"]):
-        intent = "QueryTrend"
-        confidence = 0.93
+        # 区分:用户是否想"看趋势"(倾向解读) vs "按日对比"(倾向对比)
+        # 默认归并到 QueryCompareAndTopN + 维度=date
+        intent = "QueryCompareAndTopN"
+        confidence = 0.9
+        slots = {**slots, "维度": "date", "排序": "时间正序"}
         if "用户" in text or "人数" in text:
             metric = "用户数"
         # 只有用户**没明确**说 GMV/销售额,才用"数量"作为默认
-        # (用"原句"判断,不用 metric 判断 — metric 已经被前面的 _detect_metric 设置过)
         elif not any(k in text for k in ["GMV", "gmv", "销售额", "成交额", "营收", "amount"]):
             metric = "数量"
 
@@ -543,6 +555,47 @@ def _mock_nl2sql(input_data: dict) -> dict:
     measure_field = mapped.get("measure_field", "amount")
     time_field = mapped.get("time_field", "order_date")
 
+    # Bug #2 修复: 字段缺失检测 → 返回友好提示而不是静默降级
+    # 提取当前数据集 fields
+    _dataset_fields = mapped.get("fields", [])
+    metric = slots.get("指标", "数量")
+    money_field = _detect_money_field(_dataset_fields)
+    stock_field = next((f for f in _dataset_fields if f.lower() in ("stock", "inventory", "quantity")), None)
+    safety_stock_field = next((f for f in _dataset_fields if f.lower() in ("safety_stock", "safety", "threshold", "min_stock")), None)
+
+    # I1/I2 GMV/金额类 — 需要 amount 字段
+    if metric in ("GMV", "amount", "销售额", "金额", "营收") and not money_field and intent in ("QueryBasicMetrics", "QueryCompareAndTopN", "AttributeAnalysis"):
+        return {
+            "sql": "",
+            "params": {},
+            "explanation": "数据集无 amount/金额 字段,无法计算 GMV",
+            "confidence": 0.0,
+            "is_executable": False,
+            "validation_errors": ["missing_field: amount"],
+            "fallback_message": (
+                f"数据集不支持 {metric} 分析: 缺少金额字段(amount/sales_amount 等)。"
+                f"当前数据集字段: {', '.join(_dataset_fields[:8])}。"
+                f"建议上传包含 amount 字段的数据集。"
+            ),
+        }
+
+    # I3 库存阈值预警 — 需要 stock 和 safety_stock 字段
+    if intent == "ThresholdAlert" and ("库存" in user_input or "stock" in user_input.lower()):
+        if not stock_field:
+            return {
+                "sql": "",
+                "params": {},
+                "explanation": "数据集无 stock/inventory 字段,无法做库存预警",
+                "confidence": 0.0,
+                "is_executable": False,
+                "validation_errors": ["missing_field: stock"],
+                "fallback_message": (
+                    "数据集不支持库存分析: 缺少 stock 字段。"
+                    f"当前数据集字段: {', '.join(_dataset_fields[:8])}。"
+                    "建议上传包含 stock、safety_stock 字段的数据集。"
+                ),
+            }
+
     # 构造 WHERE 子句
     where_parts = []
     for f in filters:
@@ -729,10 +782,20 @@ ORDER BY `{metric_friendly}` ASC LIMIT 50"""
         metric_friendly = {
             "GMV": "销售额", "amount": "销售额", "profit": "利润",
         }.get(metric, metric)
-        sql = f"""SELECT `{cat_field}` AS `{cat_field_friendly}`, {agg_expr} AS `{metric_friendly}`,
-       {agg_expr} * 1.0 / SUM({agg_expr}) OVER () AS 贡献度
-FROM `{table}` WHERE {where}
-GROUP BY `{cat_field}` ORDER BY 贡献度 DESC LIMIT 10"""
+
+        # Bug #4 修复 v2: 上一个版本 SUM(SUM(amount)) 和 隐式交叉连接都报错
+        # 改用两个独立子查询,使用 UNION 风格 + 标量子查询
+        sql = f"""SELECT `{cat_field}` AS `{cat_field_friendly}`,
+       agg AS `{metric_friendly}`,
+       agg * 1.0 / (SELECT SUM(agg) FROM (
+           SELECT {agg_expr} AS agg FROM `{table}` WHERE {where} GROUP BY `{cat_field}`
+       )) AS 贡献度
+FROM (
+    SELECT `{cat_field}`, {agg_expr} AS agg
+    FROM `{table}` WHERE {where}
+    GROUP BY `{cat_field}`
+) t
+ORDER BY 贡献度 DESC LIMIT 10"""
         explanation = f"归因分析,按 {cat_field} 拆解,时间范围 {time_range}"
 
     else:  # SmartInterpretation

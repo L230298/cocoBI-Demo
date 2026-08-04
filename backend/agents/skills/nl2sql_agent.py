@@ -9,19 +9,26 @@ from config import FALLBACK_PROMPTS
 NL2SQL_AGENT_PROMPT = """# Role
 你是 cocoBI 的 NL2SQL 专家,基于 Schema 映射生成 SQL。
 
+# 核心规则:业务术语计算公式优先 (P0-1 升级)
+- 你已经获得了 term_mappings (业务术语 → SQL 公式)
+- 当 SQL 涉及业务术语(库存/客单价/复购率/转化率/GMV 等)时,必须严格使用 term_mappings 里的 formula
+- 不要把"库存"用 orders 表的 SUM(amount) 替代,这是 P0-1 的核心修复点
+
 # 输入
 - 意图: {intent}
 - 槽位: {slots}
 - 已映射 Schema: {mapped_query}
+- 业务术语公式: {term_mappings}
 
 # 输出(JSON)
 {
   "sql": "SELECT ...",
   "params": {},
-  "explanation": "为什么这样写",
+  "explanation": "为什么这样写 (引用了哪些业务术语公式)",
   "confidence": 0.0-1.0,
   "is_executable": true 或 false,
-  "validation_errors": []
+  "validation_errors": [],
+  "terms_used": ["库存", "客单价"]  // 本次 SQL 用到的业务术语
 }
 
 # SQL 规范
@@ -31,14 +38,17 @@ NL2SQL_AGENT_PROMPT = """# Role
 - 字段引用必须用反引号
 - 遇到 JOIN 时,显式声明 ON
 
-# Few-shot 示例
-输入 mapped_query: {tables: ["orders"], fields: ["SUM(order_amount)"], filters: [{date >= '2026-07-13'}]}
+# Few-shot 示例 (业务术语)
+输入 mapped_query: {tables: ["inventory"], fields: ["stock","sku"], filters: [{stock < 100}]}
+term_mappings: {"库存": "SUM(`stock`)", "安全库存": "`safety_stock`"}
 输出: {
-  "sql": "SELECT SUM(`order_amount`) AS gmv FROM `orders` WHERE `order_date` >= '2026-07-13' LIMIT 1000",
+  "sql": "SELECT `sku`, `stock`, `safety_stock` FROM `inventory` WHERE `stock` < `safety_stock` ORDER BY (`safety_stock` - `stock`) DESC LIMIT 100",
   "params": {},
+  "explanation": "使用业务术语'库存'的 SUM(stock) 公式,以及'安全库存'的 safety_stock 阈值字段,筛选库存量低于安全线的 SKU",
   "confidence": 0.95,
   "is_executable": true,
-  "validation_errors": []
+  "validation_errors": [],
+  "terms_used": ["库存", "安全库存"]
 }
 
 # 边界
@@ -52,11 +62,20 @@ class NL2SQLAgent(BaseAgent):
         super().__init__(name="nl2sql_agent", system_prompt=NL2SQL_AGENT_PROMPT)
 
     async def run(self, intent: str, slots: dict, mapped_query: dict, dataset_id: str, user_input: str = "") -> dict:
-        """生成 SQL - 失败时重试 3 次 → 降级为兜底 - PRD §3.1.5"""
+        """P0-1.4 升级: SQL 生成时把 term_mappings 喂给 LLM,业务术语公式优先
+
+        生成 SQL - 失败时重试 3 次 → 降级为兜底 - PRD §3.1.5
+        """
         last_error = None
         for attempt in range(3):
             result = await super().run(
-                {"intent": intent, "slots": slots, "mapped_query": mapped_query, "user_input": user_input}
+                {
+                    "intent": intent,
+                    "slots": slots,
+                    "mapped_query": mapped_query,
+                    "user_input": user_input,
+                    "term_mappings": mapped_query.get("term_mappings", {}) if isinstance(mapped_query, dict) else {},
+                }
             )
 
             # 校验

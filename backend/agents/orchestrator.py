@@ -15,6 +15,17 @@ from services.session_service import record_query, update_query_sql, update_quer
 from services import analytics
 
 
+def get_query(user_id: str, query_id: str) -> dict | None:
+    """P2-1 辅助:从 session_service 拿前序 query 的 SQL 和结果,用于 I5 复用"""
+    from services.session_service import _QUERIES  # noqa: F401
+    qs = _QUERIES.get(user_id, [])
+    for q in qs:
+        if q.get("id") == query_id:
+            return q
+    return None
+from services import analytics
+
+
 # Chitchat 关键词模式: 命中就直接返回功能介绍, 不走数据流
 _CHITCHAT_PATTERNS = [
     ("功能", "FEATURES"),
@@ -141,10 +152,12 @@ class Orchestrator:
                 intent_confidence=1.0,
                 slots={"type": chitchat_resp["type"]},
             )
+            # P2-2 修复: Chitchat 跳过 StorytellingAgent,不输出 next_steps / followups
+            # 语义上 Chitchat 不应该输出"下一步建议",闭环边界校验
             yield {"event": "intent", "data": {"intent": "Chitchat", "confidence": 1.0, "slots": {}, "alternatives": []}}
             yield {"event": "chitchat", "data": chitchat_resp}
             yield {"event": "state_change", "state": "completed", "message": "回复完成"}
-            yield {"event": "complete", "data": {"title": "cocoBI 使用指南", "summary": chitchat_resp["summary"], "chitchat": True}}
+            yield {"event": "complete", "data": {"title": "cocoBI 使用指南", "summary": chitchat_resp["summary"], "chitchat": True, "next_steps_count": 0, "followups_count": 0}}
             return
 
         intent_result = await self.intent_agent.run(
@@ -216,6 +229,27 @@ class Orchestrator:
 
         yield {"event": "schema", "data": schema_result}
 
+        # P0-1 数据降级: 业务术语命中但数据集缺字段,返回友好提示
+        if schema_result.get("fallback_message"):
+            analytics.record_event(
+                event_type="error_occurred",
+                user_input=user_input,
+                session_id=session_id,
+                query_id=query_id,
+                intent_recognized=intent_result["intent"],
+                error_code="TERM_FIELDS_MISSING",
+                error_stage="schema",
+                error_msg=schema_result["fallback_message"],
+                extra={"term_mappings": schema_result.get("term_mappings")},
+            )
+            yield {
+                "event": "fallback",
+                "state": "abnormal",
+                "message": schema_result["fallback_message"],
+                "data": schema_result,
+            }
+            return
+
         if schema_result.get("confidence", 0) < 0.5:
             analytics.record_event(
                 event_type="error_occurred",
@@ -237,6 +271,121 @@ class Orchestrator:
             return
 
         # ============ 阶段 3: NL2SQLAgent ============
+        # P2-1 修复 (BC-004): I5 (SmartInterpretation) 优先复用前序 query 的 SQL/数据
+        # 而不是触发新查询。语义上"解释一下"就是解读前置结果。
+        previous_query_id = ""
+        reused_from_previous = False
+        if intent_result["intent"] == "SmartInterpretation" and history:
+            # 找最近一条非 I5 的同 dataset 查询
+            for h in reversed(history):
+                if h.get("intent") in ("QueryBasicMetrics", "QueryCompareAndTopN",
+                                       "QueryTrend", "QueryUserCount",
+                                       "ThresholdAlert", "AttributeAnalysis"):
+                    if not h.get("dataset_id") or h.get("dataset_id") == dataset_id:
+                        previous_query_id = h.get("query_id", "")
+                        reused_from_previous = True
+                        break
+
+        if reused_from_previous and previous_query_id:
+            # 从 session 复用前序的 SQL/结果,跳过 NL2SQL 新查询
+            previous = get_query(user_id, previous_query_id)
+            if previous and previous.get("sql"):
+                sql_result = {
+                    "sql": previous.get("sql", ""),
+                    "params": {},
+                    "explanation": f"P2-1 复用前序 query {previous_query_id} 的 SQL,不再新查询",
+                    "confidence": 0.9,
+                    "is_executable": True,
+                    "validation_errors": [],
+                    "reused_from_previous": True,
+                }
+                full_result["sql"] = sql_result
+                full_result["previous_query_id"] = previous_query_id
+                # 直接复用前序的 sql_result
+                exec_result = previous.get("sql_result") or {
+                    "success": True,
+                    "rows": previous.get("rows", []),
+                    "row_count": len(previous.get("rows", [])),
+                }
+                # 立即补埋点: sql_generated + sql_executed (复用状态)
+                analytics.record_event(
+                    event_type="sql_generated",
+                    user_input=user_input,
+                    session_id=session_id,
+                    query_id=query_id,
+                    intent_recognized=intent_result["intent"],
+                    sql_generated=sql_result["sql"],
+                    sql_confidence=0.9,
+                    sql_retry_count=0,
+                    extra={"is_executable": True, "reused_from_previous": True, "previous_query_id": previous_query_id},
+                )
+                yield {"event": "state_change", "state": "generating", "message": f"复用前序分析结果({previous_query_id})..."}
+                yield {"event": "sql", "data": sql_result}
+                analytics.record_event(
+                    event_type="sql_executed",
+                    user_input=user_input,
+                    session_id=session_id,
+                    query_id=query_id,
+                    intent_recognized=intent_result["intent"],
+                    sql_generated=sql_result["sql"],
+                    sql_executed_status="success",
+                    sql_elapsed_ms=0,  # 复用,无新查询耗时
+                    row_count=exec_result.get("row_count"),
+                    extra={"reused_from_previous": True},
+                )
+                yield {"event": "sql_result", "data": exec_result}
+                full_result["sql_result"] = exec_result
+                # 跳到 StorytellingAgent
+                yield {"event": "state_change", "state": "generating", "message": "正在生成数据故事..."}
+                story = await self.storytelling_agent.run(
+                    full_result=full_result,
+                    user_context={"session_id": session_id, "user_id": user_id},
+                )
+                # 埋点
+                next_steps_count = len(story.get("next_steps", []) or [])
+                followups_count = len(story.get("recommended_followups", []) or [])
+                analytics.record_event(
+                    event_type="story_generated",
+                    user_input=user_input,
+                    session_id=session_id,
+                    query_id=query_id,
+                    intent_recognized=intent_result["intent"],
+                    sql_generated=sql_result["sql"],
+                    story_generated={
+                        "title": story.get("title"),
+                        "summary": story.get("summary"),
+                        "sections_count": len(story.get("sections", []) or []),
+                        "observations_count": len(story.get("observations", []) or []),
+                        "has_charts": bool(story.get("charts")),
+                    },
+                    next_steps_count=next_steps_count,
+                    followups_count=followups_count,
+                    extra={"reused_from_previous": True},
+                )
+                for obs in story.get("observations", []):
+                    yield {"event": "observation", "data": obs}
+                    await asyncio.sleep(0.05)
+                for step in story.get("next_steps", []):
+                    yield {"event": "next_step", "data": step}
+                    await asyncio.sleep(0.05)
+                for fu in story.get("recommended_followups", []):
+                    yield {"event": "followup", "data": fu}
+                    await asyncio.sleep(0.05)
+                yield {"event": "state_change", "state": "completed", "message": "分析完成"}
+                yield {"event": "complete", "data": story}
+                if query_id and story.get("charts"):
+                    update_query_charts(user_id, query_id, story.get("charts") or [])
+                return
+
+        # 兜底: I5 没有前序数据时,按"最近 7 天"默认值生成新查询
+        if intent_result["intent"] == "SmartInterpretation" and not (reused_from_previous and previous_query_id):
+            # 用上一轮 schema_result 走完整 NL2SQL,但 metric/time 兜底
+            if not intent_result.get("slots", {}).get("时间范围"):
+                intent_result.setdefault("slots", {})["时间范围"] = "最近7天"
+                slots = dict(intent_result.get("slots", {}))
+                slots["时间范围"] = "最近7天"
+                intent_result["slots"] = slots
+
         yield {"event": "state_change", "state": "generating", "message": "正在生成查询语句..."}
         sql_result = await self.nl2sql_agent.run(
             intent=intent_result["intent"],

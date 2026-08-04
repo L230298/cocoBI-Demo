@@ -11,3 +11,4 @@ from . import export_data_story  # noqa: F401
 from . import get_recent_queries  # noqa: F401
 from . import collect_user_feedback  # noqa: F401
 from . import generate_next_steps  # noqa: F401
+from . import query_business_glossary  # noqa: F401  # P0-1: 业务术语库
