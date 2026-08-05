@@ -737,30 +737,48 @@ GROUP BY `{cat_field}` ORDER BY `{metric_friendly}` DESC LIMIT {top_n}"""
             explanation = f"按 {cat_field} 排序"
 
     elif intent == "ThresholdAlert":
-        if "user" in metric or "用户" in metric:
-            agg_expr = f"COUNT(DISTINCT `{measure_field}`)"
-        elif metric in ("GMV", "amount", "销售额", "金额", "营收"):
-            money_field = _detect_money_field(fields)
-            if money_field:
-                agg_expr = f"SUM(`{money_field}`)"
-            else:
-                agg_expr = f"COUNT(*)"
-        else:
-            agg_expr = f"COUNT(*)"
+        # Bug #5 修复: 库存阈值预警应列出每个低库存 SKU,而不是 GROUP BY category 计数
+        # 用户问 "哪些 SKU 库存低于安全线" → 期望逐个 SKU 列表
+        # 检测库存类字段
+        stock_field = next((f for f in fields if f.lower() in ("stock", "inventory", "quantity", "qty")), None)
+        safety_field = next((f for f in fields if f.lower() in ("safety_stock", "safety", "threshold", "min_stock")), None)
+        sku_field = next((f for f in fields if any(k in f.lower() for k in ("sku", "product_id", "item_id"))), None)
+        name_field = next((f for f in fields if "name" in f.lower() and any(k in f.lower() for k in ("product", "item"))), None)
+        location_field = next((f for f in fields if "location" in f.lower() or "warehouse" in f.lower()), None)
 
-        cat_field = _find_category_field(mapped)
-        cat_field_friendly = {
-            "product_category": "产品类别", "category": "类别", "device_config": "设备",
-            "customer_city": "城市", "region": "地区", "channel": "渠道",
-        }.get(cat_field.lower() if isinstance(cat_field, str) else "", cat_field)
-        metric_friendly = {
-            "GMV": "销售额", "amount": "销售额", "profit": "利润",
-        }.get(metric, metric)
-        sql = f"""SELECT `{cat_field}` AS `{cat_field_friendly}`, {agg_expr} AS `{metric_friendly}`
+        if stock_field and safety_field:
+            # 完整模式: 列出每个低库存 SKU
+            select_cols = []
+            if sku_field:
+                select_cols.append(f"`{sku_field}`")
+            if name_field:
+                select_cols.append(f"`{name_field}`")
+            select_cols.append(f"`{stock_field}` AS 库存")
+            select_cols.append(f"`{safety_field}` AS 安全库存")
+            select_cols.append(f"`{safety_field}` - `{stock_field}` AS 缺货量")
+            if location_field:
+                select_cols.append(f"`{location_field}`")
+            cols_str = ", ".join(select_cols)
+            sql = f"""SELECT {cols_str}
+FROM `{table}` WHERE `{stock_field}` < `{safety_field}`
+ORDER BY 缺货量 DESC LIMIT 100"""
+            explanation = f"列出库存低于安全线的 SKU,共 {stock_field}/{safety_field} 对比"
+        elif stock_field:
+            # 有 stock 但无 safety_stock → 动态阈值(均值×0.7)
+            sql = f"""SELECT `{stock_field}` AS 库存
+FROM `{table}` WHERE `{stock_field}` < (
+    SELECT AVG(`{stock_field}`) * 0.7 FROM `{table}`
+)
+ORDER BY `{stock_field}` ASC LIMIT 100"""
+            explanation = f"列出库存低于平均 70% 的 SKU(无安全库存字段)"
+        else:
+            # 兜底:按 category 计数(向后兼容)
+            cat_field = _find_category_field(mapped)
+            sql = f"""SELECT `{cat_field}` AS 类别, COUNT(*) AS 库存
 FROM `{table}` WHERE {where}
-GROUP BY `{cat_field}` HAVING `{metric_friendly}` < 1000
-ORDER BY `{metric_friendly}` ASC LIMIT 50"""
-        explanation = f"阈值预警查询,时间范围 {time_range}"
+GROUP BY `{cat_field}` HAVING 库存 < 1000
+ORDER BY 库存 ASC LIMIT 50"""
+            explanation = f"统计各类别库存数量"
 
     elif intent == "AttributeAnalysis":
         if "user" in metric or "用户" in metric:
